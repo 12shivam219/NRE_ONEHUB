@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # FastAPI Backend
+  # FastAPI backend only. Run the React app from the repo Frontend/ separately.
   api-server:
     build:
       context: .
@@ -14,31 +14,11 @@ services:
       - ENVIRONMENT=production
       - DATABASE_URL=${DATABASE_URL}
       - GROQ_API_KEY=${GROQ_API_KEY}
-      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - GOOGLE_DRIVE_FOLDER_ID=${GOOGLE_DRIVE_FOLDER_ID}
       - VITE_APP_URL=${VITE_APP_URL}
     volumes:
       - ./utils:/app/utils
       - ./api_server:/app/api_server
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  # React Frontend (development mode with Vite)
-  react-frontend:
-    container_name: text-processor-react
-    build:
-      context: ./react_client
-      dockerfile: Dockerfile
-    ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_URL=http://api-server:8000
-      - VITE_APP_URL=http://localhost:5173
-    depends_on:
-      - api-server
-    volumes:
-      - ./react_client/src:/app/src
     restart: unless-stopped
     networks:
       - app-network

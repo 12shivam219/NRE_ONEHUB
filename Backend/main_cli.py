@@ -2,7 +2,7 @@
 """
 Resume Automation CLI - Command-line interface for end-to-end resume automation.
 
-This script provides a CLI interface to the complete automation workflow (formerly Tab 7).
+This script provides a CLI interface to the complete automation workflow.
 For REST API access, see api_server/main.py
 
 Usage:

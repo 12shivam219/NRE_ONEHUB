@@ -97,36 +97,3 @@ class BookmarkManager:
         
         logger.debug(f"Suggested mapping: {mapping}")
         return mapping
-    
-    def get_bookmark_context(self, doc, bookmark_name: str) -> Tuple[bool, str]:
-        """
-        Get context information about a bookmark (surrounding text).
-        
-        Args:
-            doc: Document object
-            bookmark_name: Name of the bookmark
-            
-        Returns:
-            Tuple of (found: bool, context_text: str)
-        """
-        try:
-            for para in doc.paragraphs:
-                if bookmark_name in para._element.xml:
-                    # Get surrounding paragraphs for context
-                    para_idx = doc.paragraphs.index(para)
-                    start_idx = max(0, para_idx - 2)
-                    end_idx = min(len(doc.paragraphs), para_idx + 3)
-                    
-                    context = []
-                    for i in range(start_idx, end_idx):
-                        text = doc.paragraphs[i].text.strip()
-                        if text:
-                            context.append(text)
-                    
-                    return True, " | ".join(context)
-            
-            return False, ""
-            
-        except Exception as e:
-            logger.error(f"Error getting bookmark context: {e}")
-            return False, ""

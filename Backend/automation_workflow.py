@@ -29,7 +29,6 @@ from utils.gemini_points_generator import GeminiPointsGenerator
 from utils.resume_injector import ResumeInjector
 from utils.text_processor import TextProcessor
 from utils.email_sender import GmailSender
-from utils.bookmark_manager import BookmarkManager
 
 # Setup logging
 logging.basicConfig(

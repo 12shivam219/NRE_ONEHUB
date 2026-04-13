@@ -1,6 +1,6 @@
 """
-Email Sender Module - Send resumes via email without office laptop login
-Supports Gmail (with App Password), Outlook, and SendGrid
+Email Sender Module - Send resumes via email without office laptop login.
+Supports Gmail (with App Password) and Outlook SMTP.
 """
 
 import smtplib
@@ -167,81 +167,15 @@ class OutlookSender(EmailSender):
             logger.error(f"Failed to attach file {filename}: {e}")
 
 
-class SendGridSender(EmailSender):
-    """SendGrid API sender - Most professional
-    
-    Setup Instructions:
-    1. Create SendGrid account (sendgrid.com)
-    2. Create API key
-    3. Set as environment variable: SENDGRID_API_KEY
-    """
-    
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key or os.getenv('SENDGRID_API_KEY')
-        if not self.api_key:
-            logger.error("SendGrid API key not found. Set SENDGRID_API_KEY environment variable")
-    
-    def send_email(self, recipient: str, subject: str, body: str, 
-                   attachments: List[tuple] = None, from_name: str = None, 
-                   from_email: str = None) -> bool:
-        """Send email via SendGrid"""
-        try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
-            import base64
-            
-            if not self.api_key:
-                logger.error("SendGrid not configured properly")
-                return False
-            
-            mail = Mail(
-                from_email=(from_email or "noreply@example.com", from_name or "Resume Sender"),
-                to_emails=recipient,
-                subject=subject,
-                plain_text_content=body
-            )
-            
-            # Add attachments
-            if attachments:
-                for filename, file_content in attachments:
-                    if isinstance(file_content, io.BytesIO):
-                        file_content.seek(0)
-                        content = base64.b64encode(file_content.read()).decode()
-                    else:
-                        content = base64.b64encode(file_content).decode()
-                    
-                    attachment = Attachment(
-                        FileContent(content),
-                        FileName(filename),
-                        FileType('application/octet-stream'),
-                        Disposition('attachment')
-                    )
-                    mail.attachment = attachment
-            
-            sg = SendGridAPIClient(self.api_key)
-            response = sg.send(mail)
-            
-            logger.info(f"Email sent successfully to {recipient} via SendGrid")
-            return True
-        
-        except ImportError:
-            logger.error("SendGrid library not installed. Install: pip install sendgrid")
-            return False
-        except Exception as e:
-            logger.error(f"Failed to send email via SendGrid: {e}")
-            return False
-
-
 def get_email_sender(provider: str = "gmail", **config) -> Optional[EmailSender]:
     """
     Factory function to get email sender
     
     Args:
-        provider: 'gmail', 'outlook', or 'sendgrid'
+        provider: 'gmail' or 'outlook'
         **config: Provider-specific configuration
             Gmail: sender_email, app_password
             Outlook: sender_email, password
-            SendGrid: api_key (or environment variable)
     
     Returns:
         EmailSender instance or None if configuration invalid
@@ -267,9 +201,6 @@ def get_email_sender(provider: str = "gmail", **config) -> Optional[EmailSender]
         else:
             logger.error("Outlook requires sender_email and password")
             return None
-    
-    elif provider == "sendgrid":
-        return SendGridSender(config.get('api_key'))
     
     else:
         logger.error(f"Unknown email provider: {provider}")

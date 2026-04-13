@@ -1,6 +1,5 @@
 """
-FastAPI Backend for Text Processor Application
-Provides REST API endpoints for all Streamlit functionality
+FastAPI backend for text processing, resume automation, and related operations.
 """
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks, Request, Depends
@@ -55,7 +54,6 @@ from utils.validators import InputValidator
 from utils.deduplicator import PointDeduplicator
 from utils.gemini_points_generator import GeminiPointsGenerator
 from utils.email_sender import get_email_sender
-from utils.cloud_storage_manager import get_cloud_storage_manager
 
 import requests
 from io import BytesIO
@@ -576,10 +574,9 @@ class EmailRequest(BaseModel):
     subject: str
     body: str
     resume_path: str
-    provider: str  # "gmail", "outlook", "sendgrid"
+    provider: str  # "gmail" or "outlook"
     sender_email: Optional[str] = None
     sender_password: Optional[str] = None
-    api_key: Optional[str] = None
 
 @app.post("/api/send-email", dependencies=[Depends(verify_optional_text_processor_api_key)])
 async def send_email(request: EmailRequest, background_tasks: BackgroundTasks) -> ApiResponse:
@@ -589,7 +586,6 @@ async def send_email(request: EmailRequest, background_tasks: BackgroundTasks) -
             request.provider,
             sender_email=request.sender_email,
             app_password=request.sender_password,
-            api_key=request.api_key
         )
         
         if not sender:

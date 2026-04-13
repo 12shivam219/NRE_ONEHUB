@@ -4,7 +4,6 @@ Groq provides free, fast API with generous limits
 """
 
 from groq import Groq
-import re
 import os
 from typing import List, Dict, Tuple
 from dotenv import load_dotenv
@@ -216,68 +215,3 @@ Generate complete resume bullet points for ALL {len(tech_stacks)} technologies:"
         except Exception as e:
             logger.error(f"Error in processing pipeline: {str(e)}")
             raise
-
-
-class PointsValidator:
-    """Validate and format generated points"""
-    
-    @staticmethod
-    def validate_points(points: str) -> Tuple[bool, str]:
-        """
-        Validate generated points
-        
-        Args:
-            points: The generated points text
-            
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
-        if not points or not points.strip():
-            return False, "Generated points are empty"
-        
-        # Check for minimum length
-        if len(points) < 50:
-            return False, "Generated points seem too short"
-        
-        return True, ""
-    
-    @staticmethod
-    def format_points_for_display(points: str) -> str:
-        """
-        Format points for better display
-        
-        Args:
-            points: Raw generated points
-            
-        Returns:
-            Formatted points
-        """
-        return points.strip()
-    
-    @staticmethod
-    def extract_bullet_points(points: str) -> List[str]:
-        """
-        Extract individual bullet points from generated text
-        
-        Args:
-            points: Generated points text
-            
-        Returns:
-            List of individual bullet points
-        """
-        lines = points.split('\n')
-        bullet_points = []
-        
-        for line in lines:
-            line = line.strip()
-            # Match bullet points (•, -, *, etc.)
-            if line and (
-                line.startswith('•') or 
-                line.startswith('-') or 
-                line.startswith('*') or
-                line.startswith('◦') or
-                re.match(r'^\d+\.\s', line)
-            ):
-                bullet_points.append(line)
-        
-        return bullet_points if bullet_points else lines
