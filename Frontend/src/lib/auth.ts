@@ -229,13 +229,6 @@ export const login = async (
 
     const clientInfo = getClientInfo();
 
-    // First, check if a user with this email exists
-    const { data: existingUser, error: checkError } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('email', trimmedEmail)
-      .maybeSingle();
-
     // Authenticate with Supabase Auth (server-side password verification with bcrypt)
     const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
       email: trimmedEmail,
@@ -243,17 +236,40 @@ export const login = async (
     });
 
     if (signInError) {
-      // Determine specific error message
+      // When sign-in fails, check if it's due to non-existent email or wrong password
       let errorMessage = 'Invalid credentials';
       
-      // If user doesn't exist in our database, it's an email issue
-      if (!existingUser && !checkError) {
-        errorMessage = 'No account found with this email. Please check the email address or sign up.';
-      } 
-      // If user exists but sign-in failed, it's a password issue
-      else if (existingUser && signInError.message?.toLowerCase().includes('invalid')) {
-        errorMessage = 'Password is incorrect. Please try again.';
-      } else {
+      try {
+        // Use the check-email-exists function to determine which field failed
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseKey) {
+          const checkEmailResponse = await fetch(
+            `${supabaseUrl}/functions/v1/check-email-exists`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': supabaseKey,
+              },
+              body: JSON.stringify({ email: trimmedEmail }),
+            }
+          );
+
+          if (checkEmailResponse.ok) {
+            const { exists } = await checkEmailResponse.json();
+            if (!exists) {
+              errorMessage = 'No account found with this email. Please check the email address or sign up.';
+            } else {
+              errorMessage = 'Password is incorrect. Please try again.';
+            }
+          } else {
+            // Fallback if function fails
+            errorMessage = signInError.message || 'Invalid credentials';
+          }
+        }
+      } catch {
+        // If function call fails, use default message
         errorMessage = signInError.message || 'Invalid credentials';
       }
 
