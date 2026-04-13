@@ -229,6 +229,13 @@ export const login = async (
 
     const clientInfo = getClientInfo();
 
+    // First, check if a user with this email exists
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('id, email')
+      .eq('email', trimmedEmail)
+      .maybeSingle();
+
     // Authenticate with Supabase Auth (server-side password verification with bcrypt)
     const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
       email: trimmedEmail,
@@ -236,10 +243,23 @@ export const login = async (
     });
 
     if (signInError) {
-      // Silently handle sign-in error
+      // Determine specific error message
+      let errorMessage = 'Invalid credentials';
+      
+      // If user doesn't exist in our database, it's an email issue
+      if (!existingUser && !checkError) {
+        errorMessage = 'No account found with this email. Please check the email address or sign up.';
+      } 
+      // If user exists but sign-in failed, it's a password issue
+      else if (existingUser && signInError.message?.toLowerCase().includes('invalid')) {
+        errorMessage = 'Password is incorrect. Please try again.';
+      } else {
+        errorMessage = signInError.message || 'Invalid credentials';
+      }
+
       // Log failed login attempt
-      await logFailedLogin({ email, clientInfo, reason: signInError.message || 'Invalid credentials' });
-      return { success: false, error: signInError.message || 'Invalid credentials' };
+      await logFailedLogin({ email, clientInfo, reason: signInError.message || errorMessage });
+      return { success: false, error: errorMessage };
     }
 
     if (!authData.user) {

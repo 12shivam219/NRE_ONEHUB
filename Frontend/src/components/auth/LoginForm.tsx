@@ -17,6 +17,10 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
 
+  // Determine which field has the error
+  const isEmailError = error.toLowerCase().includes('email') || error.toLowerCase().includes('account');
+  const isPasswordError = error.toLowerCase().includes('password');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -138,9 +142,18 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
                   required
                   aria-required="true"
                   autoComplete="email"
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder-slate-400 transition-all duration-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 focus:outline-none"
+                  className={`w-full rounded-md border px-3 py-1.5 text-sm placeholder-slate-400 transition-all duration-200 focus:outline-none ${
+                    isEmailError 
+                      ? 'border-red-400 bg-red-50 text-slate-900 focus:border-red-600 focus:ring-1 focus:ring-red-200' 
+                      : 'border-slate-300 bg-white text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-200'
+                  }`}
                   placeholder="name@example.com"
                 />
+                {isEmailError && error && (
+                  <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                    <span>✕</span> {error}
+                  </p>
+                )}
               </div>
 
               {!forgotMode && (
@@ -157,9 +170,18 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
                   required
                   aria-required="true"
                   autoComplete="current-password"
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder-slate-400 transition-all duration-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 focus:outline-none"
+                  className={`w-full rounded-md border px-3 py-1.5 text-sm placeholder-slate-400 transition-all duration-200 focus:outline-none ${
+                    isPasswordError
+                      ? 'border-red-400 bg-red-50 text-slate-900 focus:border-red-600 focus:ring-1 focus:ring-red-200'
+                      : 'border-slate-300 bg-white text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-200'
+                  }`}
                   placeholder="••••••••"
                 />
+                {isPasswordError && error && (
+                  <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                    <span>✕</span> {error}
+                  </p>
+                )}
               </div>
 
               {/* Remember Me & Forgot Password */}
