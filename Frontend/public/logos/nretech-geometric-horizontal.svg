@@ -1,0 +1,79 @@
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" width="400" height="300">
+  <defs>
+    <linearGradient id="netGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#eab308" />
+      <stop offset="50%" stopColor="#d4af37" />
+      <stop offset="100%" stopColor="#b8960f" />
+    </linearGradient>
+    <filter id="netGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="300" fill="#0d1117" />
+
+  <!-- Icon Section (Left) -->
+  <g>
+    <!-- Hexagonal frame -->
+    <path
+      d="M 100 50 L 145 75 L 145 125 L 100 150 L 55 125 L 55 75 Z"
+      fill="none"
+      stroke="#d4af37"
+      strokeWidth="2.5"
+      opacity="0.6"
+    />
+
+    <!-- Inner hexagon -->
+    <path
+      d="M 100 70 L 130 90 L 130 130 L 100 150 L 70 130 L 70 90 Z"
+      fill="none"
+      stroke="#d4af37"
+      strokeWidth="2"
+      opacity="0.8"
+    />
+
+    <!-- Data nodes - hexagon vertices -->
+    <circle cx="100" cy="50" r="8" fill="url(#netGradient)" filter="url(#netGlow)" />
+    <circle cx="145" cy="75" r="8" fill="url(#netGradient)" filter="url(#netGlow)" />
+    <circle cx="145" cy="125" r="8" fill="url(#netGradient)" filter="url(#netGlow)" />
+    <circle cx="100" cy="150" r="8" fill="url(#netGradient)" filter="url(#netGlow)" />
+    <circle cx="55" cy="125" r="8" fill="url(#netGradient)" filter="url(#netGlow)" />
+    <circle cx="55" cy="75" r="8" fill="url(#netGradient)" filter="url(#netGlow)" />
+
+    <!-- Center connection point -->
+    <circle cx="100" cy="100" r="10" fill="url(#netGradient)" filter="url(#netGlow)" />
+
+    <!-- Connection lines from center to vertices -->
+    <line x1="100" y1="100" x2="100" y2="50" stroke="#d4af37" strokeWidth="1.5" opacity="0.4" />
+    <line x1="100" y1="100" x2="145" y2="75" stroke="#d4af37" strokeWidth="1.5" opacity="0.4" />
+    <line x1="100" y1="100" x2="145" y2="125" stroke="#d4af37" strokeWidth="1.5" opacity="0.4" />
+    <line x1="100" y1="100" x2="100" y2="150" stroke="#d4af37" strokeWidth="1.5" opacity="0.4" />
+    <line x1="100" y1="100" x2="55" y2="125" stroke="#d4af37" strokeWidth="1.5" opacity="0.4" />
+    <line x1="100" y1="100" x2="55" y2="75" stroke="#d4af37" strokeWidth="1.5" opacity="0.4" />
+
+    <!-- Accent triangles for data flow -->
+    <path d="M 100 50 L 110 70 L 90 70 Z" fill="#d4af37" opacity="0.5" />
+    <path d="M 145 125 L 135 135 L 145 145 Z" fill="#d4af37" opacity="0.5" />
+
+    <!-- Highlight -->
+    <ellipse cx="110" cy="90" rx="6" ry="4" fill="white" opacity="0.3" />
+  </g>
+
+  <!-- Text Section (Right) -->
+  <g>
+    <!-- Main text -->
+    <text x="220" y="125" fontSize="48" fontWeight="900" fontFamily="'Plus Jakarta Sans', 'Inter', sans-serif" fill="#d4af37" letterSpacing="-1">
+      NRETech
+    </text>
+
+    <!-- Slogan -->
+    <text x="220" y="160" fontSize="10" fontWeight="600" fontFamily="'Plus Jakarta Sans', 'Inter', sans-serif" fill="rgba(255,255,255,0.7)" letterSpacing="2" textAnchor="start">
+      IT'S TIME TO MAKE IT
+    </text>
+  </g>
+</svg>

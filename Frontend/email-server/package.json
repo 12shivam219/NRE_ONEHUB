@@ -1,0 +1,47 @@
+{
+  "name": "loster-email-server",
+  "version": "1.0.0",
+  "description": "Email server for Loster CRM",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "start:worker": "node worker.js",
+    "dev:worker": "node --watch worker.js",
+    "start:scheduler": "node scheduler.js",
+    "dev:scheduler": "node --watch scheduler.js",
+    "start:agent": "node job-extraction-agent.js",
+    "dev:agent": "node --watch job-extraction-agent.js",
+    "start:all": "concurrently \"npm start\" \"npm run start:worker\" \"npm run start:scheduler\"",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:worker\" \"npm run dev:scheduler\"",
+    "test": "node test-all-scenarios.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.37.0",
+    "axios": "^1.6.2",
+    "body-parser": "^1.20.2",
+    "bullmq": "^5.66.4",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "cron": "^3.1.7",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "8.1.0",
+    "ioredis": "^5.8.2",
+    "nodemailer": "^7.0.11",
+    "p-limit": "^7.2.0",
+    "rate-limit-redis": "^4.3.1",
+    "redis": "^4.7.1",
+    "sanitize-html": "^2.17.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "concurrently": "^9.2.1",
+    "node-fetch": "^3.3.2"
+  },
+  "overrides": {
+    "qs@<=6.14.2": "6.14.2"
+  }
+}

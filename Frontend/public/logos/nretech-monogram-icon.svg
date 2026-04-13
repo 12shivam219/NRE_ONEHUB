@@ -1,0 +1,66 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+  <defs>
+    <linearGradient id="monoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#eab308" />
+      <stop offset="50%" stopColor="#d4af37" />
+      <stop offset="100%" stopColor="#b8960f" />
+    </linearGradient>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#1a1f27" />
+      <stop offset="100%" stopColor="#0d1117" />
+    </linearGradient>
+    <filter id="monoGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="200" height="200" fill="#0d1117" />
+
+  <!-- Shield background -->
+  <path
+    d="M 100 25 L 150 50 L 150 105 Q 100 155 100 155 Q 100 155 50 105 L 50 50 Z"
+    fill="url(#bgGradient)"
+    stroke="#d4af37"
+    strokeWidth="2.5"
+  />
+
+  <!-- Inner shield highlight -->
+  <path
+    d="M 100 30 L 145 52 L 145 105 Q 100 150 100 150 Q 100 150 55 105 L 55 52 Z"
+    fill="none"
+    stroke="#d4af37"
+    strokeWidth="1.5"
+    opacity="0.5"
+  />
+
+  <!-- Monogram text - NT in gold -->
+  <text
+    x="100"
+    y="110"
+    fontSize="70"
+    fontWeight="900"
+    fontFamily="'Plus Jakarta Sans', 'Inter', sans-serif"
+    fill="url(#monoGradient)"
+    textAnchor="middle"
+    dominantBaseline="middle"
+    filter="url(#monoGlow)"
+    letterSpacing="-3"
+  >
+    NT
+  </text>
+
+  <!-- Decorative corner accents -->
+  <circle cx="60" cy="35" r="4" fill="#d4af37" opacity="0.6" />
+  <circle cx="140" cy="35" r="4" fill="#d4af37" opacity="0.6" />
+
+  <!-- Bottom accent line -->
+  <line x1="75" y1="145" x2="125" y2="145" stroke="#d4af37" strokeWidth="2" opacity="0.7" />
+
+  <!-- Subtle reflection on shield -->
+  <ellipse cx="95" cy="80" rx="12" ry="8" fill="white" opacity="0.15" />
+</svg>

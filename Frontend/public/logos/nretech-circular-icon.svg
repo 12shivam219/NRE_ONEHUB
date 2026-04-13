@@ -1,0 +1,80 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Define gradients -->
+  <defs>
+    <radialGradient id="goldGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#FCD34D;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#EAB308;stop-opacity:1" />
+    </radialGradient>
+    <linearGradient id="goldGradientLinear" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FBBF24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#EAB308;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer orbital ring -->
+  <circle cx="100" cy="100" r="95" fill="none" stroke="#EAB308" stroke-width="2" opacity="0.6"/>
+  
+  <!-- Second orbital ring -->
+  <circle cx="100" cy="100" r="75" fill="none" stroke="#EAB308" stroke-width="2" opacity="0.5"/>
+  
+  <!-- Third orbital ring -->
+  <circle cx="100" cy="100" r="55" fill="none" stroke="#EAB308" stroke-width="2" opacity="0.4"/>
+  
+  <!-- Inner core circle -->
+  <circle cx="100" cy="100" r="35" fill="url(#goldGradient)" opacity="0.9"/>
+  
+  <!-- Center dot -->
+  <circle cx="100" cy="100" r="8" fill="#EAB308"/>
+  
+  <!-- Outer orbital dots (12 positions) -->
+  <!-- Top -->
+  <circle cx="100" cy="15" r="4" fill="#EAB308"/>
+  <!-- Top-right -->
+  <circle cx="160" cy="30" r="4" fill="#EAB308" opacity="0.8"/>
+  <!-- Right-top -->
+  <circle cx="180" cy="70" r="4" fill="#EAB308" opacity="0.7"/>
+  <!-- Right -->
+  <circle cx="185" cy="100" r="4" fill="#EAB308"/>
+  <!-- Right-bottom -->
+  <circle cx="180" cy="130" r="4" fill="#EAB308" opacity="0.7"/>
+  <!-- Bottom-right -->
+  <circle cx="160" cy="170" r="4" fill="#EAB308" opacity="0.8"/>
+  <!-- Bottom -->
+  <circle cx="100" cy="185" r="4" fill="#EAB308"/>
+  <!-- Bottom-left -->
+  <circle cx="40" cy="170" r="4" fill="#EAB308" opacity="0.8"/>
+  <!-- Left-bottom -->
+  <circle cx="20" cy="130" r="4" fill="#EAB308" opacity="0.7"/>
+  <!-- Left -->
+  <circle cx="15" cy="100" r="4" fill="#EAB308"/>
+  <!-- Left-top -->
+  <circle cx="20" cy="70" r="4" fill="#EAB308" opacity="0.7"/>
+  <!-- Top-left -->
+  <circle cx="40" cy="30" r="4" fill="#EAB308" opacity="0.8"/>
+  
+  <!-- Middle ring dots (8 positions) -->
+  <!-- Top -->
+  <circle cx="100" cy="35" r="3" fill="#EAB308" opacity="0.6"/>
+  <!-- Top-right -->
+  <circle cx="140" cy="50" r="3" fill="#EAB308" opacity="0.5"/>
+  <!-- Right -->
+  <circle cx="160" cy="100" r="3" fill="#EAB308" opacity="0.6"/>
+  <!-- Bottom-right -->
+  <circle cx="140" cy="150" r="3" fill="#EAB308" opacity="0.5"/>
+  <!-- Bottom -->
+  <circle cx="100" cy="165" r="3" fill="#EAB308" opacity="0.6"/>
+  <!-- Bottom-left -->
+  <circle cx="60" cy="150" r="3" fill="#EAB308" opacity="0.5"/>
+  <!-- Left -->
+  <circle cx="40" cy="100" r="3" fill="#EAB308" opacity="0.6"/>
+  <!-- Top-left -->
+  <circle cx="60" cy="50" r="3" fill="#EAB308" opacity="0.5"/>
+  
+  <!-- Decorative arcs -->
+  <g stroke="#EAB308" stroke-width="1.5" fill="none" opacity="0.3">
+    <!-- Arc segments -->
+    <path d="M 100 20 A 80 80 0 0 1 156.57 43.43" />
+    <path d="M 157 100 A 80 80 0 0 1 100 180" />
+    <path d="M 100 20 A 60 60 0 0 0 30 100" />
+  </g>
+</svg>

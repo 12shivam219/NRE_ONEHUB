@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <link rel="icon" type="image/svg+xml" href="/logos/nt-monogram.svg?v=3" />
+    <link rel="alternate icon" type="image/png" href="/logos/favicon.png?v=3" />
+    <link rel="apple-touch-icon" href="/logos/apple-touch-icon.png" />
+    <title>NRETech OneHub - Recruitment & CRM Platform</title>
+    <meta name="description" content="NRETech OneHub - Professional recruitment platform with CRM, resume management, and interview scheduling tools.">
+    <meta name="theme-color" content="#eab308">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="NRETech OneHub - Recruitment & CRM Platform">
+    <meta property="og:description" content="Professional recruitment platform with CRM, resume management, and interview scheduling tools.">
+    <meta property="og:image" content="/logos/nretech-og-image.png">
+    <meta property="og:url" content="https://onehub.nretech.com">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="NRETech OneHub">
+    <meta name="twitter:description" content="Professional recruitment platform with CRM, resume management, and interview scheduling tools.">
+    <meta name="twitter:image" content="/logos/nretech-og-image.png">
+    <meta name="keywords" content="recruitment, CRM, resume, interviews, HR platform">
+    <meta name="author" content="NRETech">
+    <!-- ⚡ PERFORMANCE: Preconnect to external services for faster connection establishment -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Extract environment variable for Supabase URL from vite -->
+    <link rel="preconnect" href="https://supabase.co" crossorigin>
+    <link rel="dns-prefetch" href="https://api.ipify.org">
+    <link rel="dns-prefetch" href="https://accounts.google.com">
+    <link rel="dns-prefetch" href="https://oauth2.googleapis.com">
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700&display=swap" as="style">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700&display=swap"
+      rel="stylesheet"
+    >
+    <!-- SECURITY: Content Security Policy to prevent XSS attacks -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' http://localhost:8080; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.ipify.org https://*.supabase.co wss://*.supabase.co http://localhost:3001 http://localhost:8000 http://localhost:8080 ws://localhost:8080 https://accounts.google.com https://oauth2.googleapis.com https://gmail.googleapis.com wss://gmail.googleapis.com; frame-src 'self' http://localhost:8080; object-src 'none'; manifest-src 'self';">
+    <!-- SECURITY: Additional security headers -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <!-- Critical CSS for initial loader - must render immediately before React bundle loads -->
+    <style>
+      /* Loader animation - critical path styling for perceived performance */
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      #initial-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        z-index: 9999;
+        transition: opacity 0.3s ease-out;
+      }
+      #initial-loader > div {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+      }
+      #initial-loader img {
+        width: 96px;
+        height: 96px;
+        animation: spin 2s linear infinite;
+        object-fit: contain;
+        filter: drop-shadow(0 0 8px rgba(234, 179, 8, 0.3));
+      }
+      #initial-loader p {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        margin: 0;
+      }
+    </style>
+    <!-- JSON-LD Structured Data for SEO -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "NRETech OneHub",
+      "description": "Professional recruitment platform with CRM, resume management, and interview scheduling tools",
+      "url": "https://onehub.nretech.com",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "creator": {
+        "@type": "Organization",
+        "name": "NRETech",
+        "url": "https://nretech.com"
+      }
+    }
+    </script>
+    <!-- Animated Favicon with Logo -->
+    <script src="/favicon-animator.js" defer></script>
+</head>
+  <body>
+    <div id="root">
+      <!-- Initial loader shown while React app is loading - styled via critical CSS in <head> -->
+      <div id="initial-loader">
+        <div>
+          <img src="/logos/nretech-circular-icon.svg" alt="Loading">
+          <p>Loading Application...</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

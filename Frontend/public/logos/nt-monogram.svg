@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Dark background -->
+  <rect width="256" height="256" rx="40" fill="#1e1e2e"/>
+  
+  <!-- Gradient -->
+  <defs>
+    <linearGradient id="ntGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#eab308;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#facc15;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Letter N -->
+  <g>
+    <!-- Left vertical -->
+    <rect x="45" y="65" width="28" height="126" rx="5" fill="url(#ntGrad)"/>
+    
+    <!-- Diagonal -->
+    <path d="M 73 65 L 130 191 L 130 65 L 158 65 L 158 191 L 73 191 Z" fill="url(#ntGrad)" fill-rule="evenodd"/>
+    
+    <!-- Right vertical -->
+    <rect x="130" y="65" width="28" height="126" rx="5" fill="url(#ntGrad)"/>
+  </g>
+  
+  <!-- Letter T -->
+  <g>
+    <!-- Top horizontal bar -->
+    <rect x="178" y="65" width="76" height="28" rx="5" fill="url(#ntGrad)"/>
+    
+    <!-- Vertical stem -->
+    <rect x="204" y="93" width="28" height="98" rx="5" fill="url(#ntGrad)"/>
+  </g>
+</svg>

@@ -1,0 +1,26 @@
+.env
+.env.*
+!.env.example
+!.env.*.example
+**/node_modules/
+**/__pycache__/
+*.pyc
+.DS_Store
+dist/
+build/
+*.egg-info/
+.venv/
+venv/
+
+# Supabase CLI local cache (contains project URLs / pooler endpoints)
+**/supabase/.temp/
+
+# Local pgbouncer secrets list — never commit real credentials
+**/pgbouncer-users.txt
+
+Backend/automation_output/
+Backend/temp_automation/
+
+# Local audit exports contained pasted secrets — do not commit
+PRODUCTION_AUDIT_REPORT.md
+PRODUCTION_AUDIT_CHECKLIST.md

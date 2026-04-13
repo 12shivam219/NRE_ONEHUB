@@ -1,0 +1,53 @@
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="goldGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#FCD34D;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#EAB308;stop-opacity:1" />
+    </radialGradient>
+  </defs>
+
+  <!-- Icon Section (Left) -->
+  <g>
+    <!-- Outer orbital ring -->
+    <circle cx="100" cy="150" r="95" fill="none" stroke="#EAB308" stroke-width="2" opacity="0.6"/>
+    
+    <!-- Second orbital ring -->
+    <circle cx="100" cy="150" r="75" fill="none" stroke="#EAB308" stroke-width="2" opacity="0.5"/>
+    
+    <!-- Third orbital ring -->
+    <circle cx="100" cy="150" r="55" fill="none" stroke="#EAB308" stroke-width="2" opacity="0.4"/>
+    
+    <!-- Inner core circle -->
+    <circle cx="100" cy="150" r="35" fill="url(#goldGradient)" opacity="0.9"/>
+    
+    <!-- Center dot -->
+    <circle cx="100" cy="150" r="8" fill="#EAB308"/>
+    
+    <!-- Outer orbital dots -->
+    <circle cx="100" cy="65" r="4" fill="#EAB308"/>
+    <circle cx="160" cy="80" r="4" fill="#EAB308" opacity="0.8"/>
+    <circle cx="180" cy="120" r="4" fill="#EAB308" opacity="0.7"/>
+    <circle cx="185" cy="150" r="4" fill="#EAB308"/>
+    <circle cx="180" cy="180" r="4" fill="#EAB308" opacity="0.7"/>
+    <circle cx="160" cy="220" r="4" fill="#EAB308" opacity="0.8"/>
+    <circle cx="100" cy="235" r="4" fill="#EAB308"/>
+    <circle cx="40" cy="220" r="4" fill="#EAB308" opacity="0.8"/>
+    <circle cx="20" cy="180" r="4" fill="#EAB308" opacity="0.7"/>
+    <circle cx="15" cy="150" r="4" fill="#EAB308"/>
+    <circle cx="20" cy="120" r="4" fill="#EAB308" opacity="0.7"/>
+    <circle cx="40" cy="80" r="4" fill="#EAB308" opacity="0.8"/>
+  </g>
+
+  <!-- Text Section (Right) -->
+  <g>
+    <!-- Main text -->
+    <text x="220" y="155" fontSize="48" fontWeight="900" fontFamily="'Plus Jakarta Sans', 'Inter', sans-serif" fill="#EAB308" letterSpacing="-1">
+      NRETech
+    </text>
+
+    <!-- Slogan -->
+    <text x="220" y="190" fontSize="10" fontWeight="600" fontFamily="'Plus Jakarta Sans', 'Inter', sans-serif" fill="rgba(234,179,8,0.8)" letterSpacing="2" textAnchor="start">
+      IT'S TIME TO MAKE IT
+    </text>
+  </g>
+</svg>
