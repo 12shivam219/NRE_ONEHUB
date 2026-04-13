@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Check } from 'lucide-react';
-import { login } from '../../lib/auth';
+import { login, requestPasswordReset } from '../../lib/auth';
 import { AuthLayout } from './AuthLayout';
+import { PasswordInputWithToggle } from './PasswordInputWithToggle';
 
 interface LoginFormProps {
   onSuccess: () => void;
@@ -11,9 +11,11 @@ interface LoginFormProps {
 export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +48,7 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
       return;
     }
 
-    const result = await login(trimmedEmail, trimmedPassword);
+    const result = await login(trimmedEmail, trimmedPassword, { rememberMe });
 
     if (result.success) {
       onSuccess();
@@ -55,6 +57,29 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
     }
 
     setLoading(false);
+  };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    const trimmedEmail = email.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError('Please enter a valid email address');
+      setLoading(false);
+      return;
+    }
+
+    const result = await requestPasswordReset(trimmedEmail);
+    setLoading(false);
+
+    if (result.success) {
+      setForgotSuccess(true);
+    } else {
+      setError(result.error || 'Could not send reset email');
+    }
   };
 
   return (
@@ -78,7 +103,7 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-3 md:space-y-3.5">
+            <form onSubmit={forgotMode ? handleForgotSubmit : handleSubmit} className="space-y-3 md:space-y-3.5">
               {error && (
                 <div
                   className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
@@ -86,6 +111,17 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
                   aria-live="polite"
                 >
                   {error}
+                </div>
+              )}
+
+              {forgotSuccess && (
+                <div
+                  className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800"
+                  role="status"
+                  aria-live="polite"
+                >
+                  If an account exists for that email, we sent instructions to reset your password. Check your inbox
+                  and spam folder.
                 </div>
               )}
 
@@ -107,14 +143,15 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
                 />
               </div>
 
+              {!forgotMode && (
+              <>
               {/* Password */}
               <div className="space-y-1">
                 <label htmlFor="password" className="block text-xs font-medium text-slate-700">
                   Password
                 </label>
-                <input
+                <PasswordInputWithToggle
                   id="password"
-                  type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -127,24 +164,35 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
 
               {/* Remember Me & Forgot Password */}
               <div className="flex items-center justify-between pt-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <div className={`relative h-4 w-4 border border-slate-300 rounded transition-colors ${
-                    rememberMe ? 'bg-blue-600 border-blue-600' : 'bg-white'
-                  }`}>
-                    {rememberMe && (
-                      <Check className="absolute inset-0 h-4 w-4 text-white" strokeWidth={3} />
-                    )}
-                  </div>
+                <label className="flex cursor-pointer items-center gap-2 select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                  />
                   <span className="text-xs text-slate-600">Remember me</span>
                 </label>
                 <button
                   type="button"
-                  onClick={() => { /* TODO: Handle forgot password */ }}
+                  onClick={() => {
+                    setForgotMode(true);
+                    setError('');
+                    setForgotSuccess(false);
+                  }}
                   className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
                 >
                   Forgot Password?
                 </button>
               </div>
+              </>
+              )}
+
+              {forgotMode && (
+                <p className="text-xs text-slate-600">
+                  Enter your email and we will send a link to reset your password.
+                </p>
+              )}
 
               {/* Submit Button */}
               <button
@@ -153,8 +201,28 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
                 className="w-full rounded-md bg-blue-600 py-2 text-xs font-semibold text-white transition-all duration-200 hover:bg-blue-700 active:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:bg-slate-300"
                 aria-busy={loading}
               >
-                {loading ? 'Signing in...' : 'Login'}
+                {loading
+                  ? forgotMode
+                    ? 'Sending...'
+                    : 'Signing in...'
+                  : forgotMode
+                    ? 'Send reset link'
+                    : 'Login'}
               </button>
+
+              {forgotMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotMode(false);
+                    setError('');
+                    setForgotSuccess(false);
+                  }}
+                  className="w-full text-xs text-slate-600 hover:text-slate-800"
+                >
+                  Back to sign in
+                </button>
+              )}
             </form>
 
             {/* Footer */}

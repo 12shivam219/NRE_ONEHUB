@@ -163,8 +163,8 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Listen for Supabase auth changes so UI stays in sync with session events.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event: string) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          // User signed in or session refreshed
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'PASSWORD_RECOVERY') {
+          // User signed in, session refreshed, or password recovery session established from email link
           void loadUser();
         } else if (event === 'USER_UPDATED') {
           void loadUser();

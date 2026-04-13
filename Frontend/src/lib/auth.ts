@@ -1,4 +1,10 @@
-import { supabase, supabaseAuthStorageKey } from './supabase';
+import {
+  supabase,
+  supabaseAuthStorageKey,
+  setAuthPersistencePreference,
+  clearAuthPersistencePreference,
+  isAuthRememberMeEnabled,
+} from './supabase';
 import type { UserRole, UserStatus } from './database.types';
 
 export interface User {
@@ -194,7 +200,8 @@ export const register = async (
  */
 export const login = async (
   email: string,
-  password: string
+  password: string,
+  options?: { rememberMe?: boolean }
 ): Promise<AuthResponse> => {
   try {
     // Trim and validate inputs
@@ -216,6 +223,9 @@ export const login = async (
     if (trimmedPassword.length < 6) {
       return { success: false, error: 'Password must be at least 6 characters' };
     }
+
+    const rememberMe = options?.rememberMe ?? false;
+    setAuthPersistencePreference(rememberMe);
 
     const clientInfo = getClientInfo();
 
@@ -283,16 +293,21 @@ export const login = async (
       origin_ip: resolvedOriginIp,
     };
 
-    // Store ONLY non-sensitive user info in sessionStorage
-    sessionStorage.setItem('user', JSON.stringify({
+    // Cache non-sensitive profile: session always; localStorage only when Remember me is on
+    const userCache = JSON.stringify({
       id: userData.id,
       email: userData.email,
       full_name: userData.full_name,
       role: userData.role,
       status: userData.status,
       email_verified: userData.email_verified,
-      // Don't store IP in session storage
-    }));
+    });
+    sessionStorage.setItem('user', userCache);
+    if (rememberMe) {
+      localStorage.setItem('user', userCache);
+    } else {
+      localStorage.removeItem('user');
+    }
 
     return {
       success: true,
@@ -340,6 +355,8 @@ export const logout = async (): Promise<void> => {
     // Continue with local cleanup even if Supabase signout fails
   }
 
+  clearAuthPersistencePreference();
+
   // Clear both sessionStorage and localStorage (for fallback compatibility)
   sessionStorage.removeItem('user');
   localStorage.removeItem('user');
@@ -351,8 +368,7 @@ export const logout = async (): Promise<void> => {
 };
 
 export const getCurrentUser = (): User | null => {
-  // SECURITY: Read from sessionStorage (cleared when tab closes)
-  const userStr = sessionStorage.getItem('user');
+  const userStr = sessionStorage.getItem('user') ?? localStorage.getItem('user');
   if (!userStr) return null;
 
   try {
@@ -394,7 +410,13 @@ export const getFreshUserData = async (): Promise<User | null> => {
       origin_ip: userData.origin_ip,
     };
 
-    sessionStorage.setItem('user', JSON.stringify(user));
+    const serialized = JSON.stringify(user);
+    sessionStorage.setItem('user', serialized);
+    if (isAuthRememberMeEnabled()) {
+      localStorage.setItem('user', serialized);
+    } else {
+      localStorage.removeItem('user');
+    }
     return user;
   } catch {
     // Silently handle fetch exception
@@ -403,7 +425,7 @@ export const getFreshUserData = async (): Promise<User | null> => {
 };
 
 export const isAuthenticated = (): boolean => {
-  return !!sessionStorage.getItem('user');
+  return !!(sessionStorage.getItem('user') || localStorage.getItem('user'));
 };
 
 /**
@@ -416,5 +438,77 @@ export const getCurrentSession = async () => {
     return session;
   } catch {
     return null;
+  }
+};
+
+/** Base URL for Supabase auth redirects (must be listed in Supabase Dashboard → Auth → URL Configuration). */
+export const getAuthRedirectBaseUrl = (): string => {
+  const fromEnv = import.meta.env.VITE_APP_URL?.trim().replace(/\/$/, '');
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return '';
+};
+
+export interface PasswordResetRequestResponse {
+  success: boolean;
+  error?: string;
+}
+
+export interface UpdatePasswordResponse {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Sends a password reset email (Supabase). Always use a generic success message in the UI
+ * so account enumeration is not possible.
+ */
+export const requestPasswordReset = async (
+  email: string
+): Promise<PasswordResetRequestResponse> => {
+  try {
+    const trimmedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      return { success: false, error: 'Invalid email format' };
+    }
+
+    const base = getAuthRedirectBaseUrl();
+    if (!base) {
+      return { success: false, error: 'Application URL is not configured' };
+    }
+
+    const redirectTo = `${base}/auth/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Failed to send reset email';
+    return { success: false, error: msg };
+  }
+};
+
+export const updatePassword = async (password: string): Promise<UpdatePasswordResponse> => {
+  try {
+    const trimmed = password.trim();
+    if (!trimmed) {
+      return { success: false, error: 'Password is required' };
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: trimmed });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Failed to update password';
+    return { success: false, error: msg };
   }
 };

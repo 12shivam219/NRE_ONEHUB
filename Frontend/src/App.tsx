@@ -25,6 +25,7 @@ import UnsyncedDraftsPanel from './components/common/UnsyncedDraftsPanel';
 // ⚡ Lazy load all heavy components to defer loading until needed
 const LazyLoginForm = lazy(() => import('./components/auth/LoginForm').then(m => ({ default: m.LoginForm })));
 const LazyRegisterForm = lazy(() => import('./components/auth/RegisterForm').then(m => ({ default: m.RegisterForm })));
+const LazyResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })));
 const LazyOfflineIndicator = lazy(() => import('./components/common/OfflineIndicator').then(m => ({ default: m.OfflineIndicator })));
 const LazySyncErrorHandler = lazy(() => import('./components/common/SyncErrorHandler').then(m => ({ default: m.SyncErrorHandler })));
 const LazySyncQueueModal = lazy(() => import('./components/common/SyncQueueModal').then(m => ({ default: m.SyncQueueModal })));
@@ -105,6 +106,14 @@ const AppContent = () => {
 
   if (location.pathname === '/oauth/callback') {
     return <OAuthCallbackPage />;
+  }
+
+  if (location.pathname === '/auth/reset-password') {
+    return (
+      <Suspense fallback={<LogoLoader fullScreen size="xl" showText label="Loading" />}>
+        <LazyResetPasswordPage />
+      </Suspense>
+    );
   }
 
   if (isLoading) {

@@ -4,6 +4,7 @@ import { register } from '../../lib/auth';
 import { checkPasswordWithHibp } from '../../lib/hibp';
 import { validatePasswordStrength } from '../../lib/formValidation';
 import { AuthLayout } from './AuthLayout';
+import { PasswordInputWithToggle } from './PasswordInputWithToggle';
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
@@ -188,11 +189,11 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
             </div>
 
             <div className="space-y-1.5 sm:space-y-2">
-              <label className="block text-xs font-semibold text-slate-700 sm:text-sm">
+              <label htmlFor="register-password" className="block text-xs font-semibold text-slate-700 sm:text-sm">
                 Password
               </label>
-              <input
-                type="password"
+              <PasswordInputWithToggle
+                id="register-password"
                 value={password}
                 onChange={handlePasswordChange}
                 required
@@ -231,11 +232,11 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
             </div>
 
             <div className="space-y-1 sm:space-y-1.5">
-              <label className="block text-[0.75rem] font-semibold text-slate-700 sm:text-[0.8125rem]">
+              <label htmlFor="register-confirm-password" className="block text-[0.75rem] font-semibold text-slate-700 sm:text-[0.8125rem]">
                 Confirm Password
               </label>
-              <input
-                type="password"
+              <PasswordInputWithToggle
+                id="register-confirm-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required

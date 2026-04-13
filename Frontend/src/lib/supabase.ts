@@ -9,6 +9,69 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabaseProjectRef = supabaseUrl ? new URL(supabaseUrl).hostname.split('.')[0] : '';
 export const supabaseAuthStorageKey = supabaseProjectRef ? `sb-${supabaseProjectRef}-auth-token` : '';
 
+/** When set to "1", Supabase session is stored in localStorage so it survives browser restarts ("Remember me"). */
+const AUTH_REMEMBER_ME_FLAG = 'nre-auth-remember-me';
+
+export function setAuthPersistencePreference(remember: boolean): void {
+  if (typeof window === 'undefined') return;
+  if (remember) {
+    localStorage.setItem(AUTH_REMEMBER_ME_FLAG, '1');
+  } else {
+    localStorage.removeItem(AUTH_REMEMBER_ME_FLAG);
+  }
+}
+
+export function clearAuthPersistencePreference(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(AUTH_REMEMBER_ME_FLAG);
+}
+
+export function isAuthRememberMeEnabled(): boolean {
+  return typeof window !== 'undefined' && localStorage.getItem(AUTH_REMEMBER_ME_FLAG) === '1';
+}
+
+function shouldUseLocalSupabaseStorage(): boolean {
+  return isAuthRememberMeEnabled();
+}
+
+/** Routes Supabase auth tokens to sessionStorage or localStorage based on Remember me. */
+const dualAuthStorage: {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+} = {
+  getItem(key: string) {
+    if (typeof window === 'undefined') return null;
+    if (shouldUseLocalSupabaseStorage()) {
+      return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    }
+    return sessionStorage.getItem(key) ?? localStorage.getItem(key);
+  },
+  setItem(key: string, value: string) {
+    if (typeof window === 'undefined') return;
+    if (shouldUseLocalSupabaseStorage()) {
+      localStorage.setItem(key, value);
+      try {
+        sessionStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    } else {
+      sessionStorage.setItem(key, value);
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    }
+  },
+  removeItem(key: string) {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  },
+};
+
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
@@ -22,7 +85,7 @@ function initSupabaseClient() {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+      storage: typeof window !== 'undefined' ? dualAuthStorage : undefined,
     },
     // Note: avoid setting custom global headers here to prevent CORS preflight
     // issues when calling Supabase Edge Functions from the browser. If specific
