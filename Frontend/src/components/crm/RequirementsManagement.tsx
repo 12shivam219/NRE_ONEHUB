@@ -8,7 +8,7 @@ import { useSearchFilters } from '../../hooks/useSearchFilters';
 import { useRequirementsPage } from '../../hooks/useRequirementsPage';
 import { deleteRequirement, type RequirementWithLogs } from '../../lib/api/requirements';
 import type { Database, RequirementStatus } from '../../lib/database.types';
-import { subscribeToRequirements, type RealtimeUpdate } from '../../lib/api/realtimeSync';
+import { subscribeToAllRequirements, type RealtimeUpdate } from '../../lib/api/realtimeSync';
 import { phoneNumberMatches } from '../../lib/phoneUtils';
 import { ErrorAlert } from '../common/ErrorAlert';
 import { RequirementsTable } from './RequirementsTable';
@@ -172,7 +172,6 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
   }, [dateRange]);
 
   const requirementsSWR = useRequirementsPage({
-    userId: user?.id,
     page,
     pageSize,
     search: searchTerm,
@@ -214,7 +213,7 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
     void mutateRequirements(undefined, { revalidate: true });
     try {
       const key0 = `requirements-page:${JSON.stringify({
-        userId: user?.id || 'anonymous',
+        userId: 'shared',
         page: 0,
         pageSize,
         search: searchTerm,
@@ -232,7 +231,7 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
     } catch {
       // Silently handle page-0 refresh error
     }
-  }, [mutateRequirements, user?.id, pageSize, searchTerm, filterStatus, dateFromIso, dateToIso, sortBy, sortOrder, minRate, maxRate, remoteFilter]);
+  }, [mutateRequirements, pageSize, searchTerm, filterStatus, dateFromIso, dateToIso, sortBy, sortOrder, minRate, maxRate, remoteFilter]);
 
   const handleApplyToolsSettings = useCallback(() => {
     // Apply date range filter
@@ -410,7 +409,7 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
         return matchesStatus && matchesSearch && matchesDate;
       };
 
-      unsubscribe = subscribeToRequirements(user.id, (update: RealtimeUpdate<Requirement>) => {
+      unsubscribe = subscribeToAllRequirements((update: RealtimeUpdate<Requirement>) => {
         if (update.type === 'INSERT') {
           if (page !== 0) {
             return;
@@ -523,7 +522,7 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
       // Also update the page-0 cache key directly so users on other pages see the new item after reset
       try {
         const key0 = `requirements-page:${JSON.stringify({
-          userId: user?.id || 'anonymous',
+          userId: 'shared',
           page: 0,
           pageSize,
           search: searchTerm,

@@ -241,15 +241,14 @@ export const uploadDocument = async (
  * Fetch all documents for a user with retry logic
  */
 export const getDocumentsCount = async (
-  userId: string
+  _userId: string
 ): Promise<{ success: boolean; count: number; error?: string }> => {
   try {
     const { count, error } = await retryAsync(
       async () =>
         supabase
           .from('documents')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId),
+          .select('*', { count: 'exact', head: true }),
       {
         maxAttempts: 2,
         initialDelayMs: 100,
@@ -260,7 +259,7 @@ export const getDocumentsCount = async (
       const appError = handleApiError(error, {
         component: 'getDocumentsCount',
         action: 'fetch_count',
-        userId,
+        userId: _userId,
       });
       return { success: false, count: 0, error: appError.message };
     }
@@ -275,7 +274,7 @@ export const getDocumentsCount = async (
 };
 
 export const getDocuments = async (
-  userId: string
+  _userId: string
 ): Promise<{ success: boolean; documents?: Document[]; error?: string }> => {
   try {
     const { data, error } = await retryAsync(
@@ -283,7 +282,6 @@ export const getDocuments = async (
         supabase
           .from('documents')
           .select('*')
-          .eq('user_id', userId)
           .order('created_at', { ascending: false }),
       {
         maxAttempts: 2,
@@ -295,7 +293,7 @@ export const getDocuments = async (
       const appError = handleApiError(error, {
         component: 'getDocuments',
         action: 'fetch_all',
-        userId,
+        userId: _userId,
       });
       return { success: false, error: appError.message };
     }
@@ -310,7 +308,7 @@ export const getDocuments = async (
 };
 
 export const getDocumentsPage = async (options: {
-  userId: string;
+  userId?: string;
   limit?: number;
   offset?: number;
   cursor?: { created_at: string; direction?: 'after' | 'before' };
@@ -321,7 +319,6 @@ export const getDocumentsPage = async (options: {
   orderDir?: 'asc' | 'desc';
 }): Promise<{ success: boolean; documents?: Document[]; total?: number; error?: string }> => {
   const {
-    userId,
     limit = 50,
     offset = 0,
     cursor,
@@ -339,8 +336,7 @@ export const getDocumentsPage = async (options: {
       async () => {
         let query = supabase
           .from('documents')
-          .select('*', { count: countMode as 'exact' | undefined })
-          .eq('user_id', userId);
+          .select('*', { count: countMode as 'exact' | undefined });
 
         // Filter by folder (Bug #14: clarify the confusing logic)
         // folderId === undefined: not passed, so filter to root (folder_id = null)
@@ -391,10 +387,10 @@ export const getDocumentsPage = async (options: {
     );
 
     if (error) {
-      const appError = handleApiError(error, {
+        const appError = handleApiError(error, {
         component: 'getDocumentsPage',
         action: 'fetch_page',
-        userId,
+          userId: options.userId,
       });
       return { success: false, error: appError.message };
     }
@@ -404,7 +400,7 @@ export const getDocumentsPage = async (options: {
     const appError = handleApiError(err, {
       component: 'getDocumentsPage',
       action: 'exception',
-      userId,
+      userId: options.userId,
     });
     return { success: false, error: appError.message };
   }
@@ -523,7 +519,6 @@ export const updateDocument = async (
       .from('documents')
       .select('*')
       .eq('id', documentId)
-      .eq('user_id', userId)
       .single();
 
     if (fetchError || !document) {
@@ -578,7 +573,6 @@ export const updateDocument = async (
             updated_at: new Date().toISOString(),
           })
           .eq('id', documentId)
-          .eq('user_id', userId)
           .select()
           .single(),
       {
@@ -703,7 +697,6 @@ export const saveDocumentToApp = async (
       .from('documents')
       .select('*')
       .eq('id', documentId)
-      .eq('user_id', userId)
       .single();
 
     if (fetchError || !document) {
@@ -757,7 +750,6 @@ export const saveDocumentToAppFolder = async (
       .from('documents')
       .select('*')
       .eq('id', documentId)
-      .eq('user_id', userId)
       .single();
 
     if (fetchError || !document) {
@@ -769,23 +761,7 @@ export const saveDocumentToAppFolder = async (
       return { success: false, error: appError.message };
     }
 
-    if (folderId) {
-      const { data: folder, error: folderError } = await supabase
-        .from('folders')
-        .select('id')
-        .eq('id', folderId)
-        .eq('user_id', userId)
-        .single();
-
-      if (folderError || !folder) {
-        const appError = handleApiError(folderError || new Error('Folder not found'), {
-          component: 'saveDocumentToAppFolder',
-          action: 'fetch_folder',
-          resource: folderId,
-        });
-        return { success: false, error: appError.message };
-      }
-    }
+    // Shared workspace: do not require folder ownership checks.
 
     const fileId = `file_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const sourceResult = await getSourceBlobForCopy(document, options);
@@ -830,7 +806,6 @@ export const duplicateDocumentToFolder = async (
       .from('documents')
       .select('*')
       .eq('id', documentId)
-      .eq('user_id', userId)
       .single();
 
     if (fetchError || !document) {
@@ -842,23 +817,7 @@ export const duplicateDocumentToFolder = async (
       return { success: false, error: appError.message };
     }
 
-    if (targetFolderId) {
-      const { data: folder, error: folderError } = await supabase
-        .from('folders')
-        .select('id')
-        .eq('id', targetFolderId)
-        .eq('user_id', userId)
-        .single();
-
-      if (folderError || !folder) {
-        const appError = handleApiError(folderError || new Error('Folder not found'), {
-          component: 'duplicateDocumentToFolder',
-          action: 'fetch_folder',
-          resource: targetFolderId,
-        });
-        return { success: false, error: appError.message };
-      }
-    }
+    // Shared workspace: do not require folder ownership checks.
 
     const sourceResult = await getSourceBlobForCopy(document);
     if (!sourceResult.success || !sourceResult.blob) {

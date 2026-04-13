@@ -108,16 +108,12 @@ export const getUserName = async (userId: string): Promise<{ full_name: string; 
 };
 
 export const getRequirementsCount = async (
-  userId?: string
+  _userId?: string
 ): Promise<{ success: boolean; count: number; error?: string }> => {
   try {
-    let query = supabase
+    const query = supabase
       .from('requirements')
       .select('*', { count: 'exact', head: true });
-
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
 
     const { count, error } = await query;
 
@@ -139,17 +135,13 @@ export const getRequirementsCount = async (
 };
 
 export const getRequirements = async (
-  userId?: string
+  _userId?: string
 ): Promise<{ success: boolean; requirements?: RequirementWithLogs[]; error?: string }> => {
   try {
-    let query = supabase
+    const query = supabase
       .from('requirements')
       .select('*')
       .order('created_at', { ascending: false });
-
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
 
     const { data, error } = await query;
 
@@ -439,57 +431,30 @@ export const createRequirement = async (
       updated_by: userId || null,
     };
 
-    console.log('Creating requirement with data:', dataToInsert);
-
-    // First, try to insert
-    const { error: insertError } = await supabase
+    const { data: inserted, error } = await supabase
       .from('requirements')
-      .insert(dataToInsert);
-
-    if (insertError) {
-      console.error('Insert error:', insertError);
-      return { success: false, error: insertError.message };
-    }
-
-    console.log('Insert successful');
-
-    // Try to fetch the inserted record by querying with filters
-    const { data: fetchedData, error: fetchError } = await supabase
-      .from('requirements')
+      .insert(dataToInsert)
       .select()
-      .eq('user_id', userId || '')
-      .eq('title', requirement.title || '')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .single();
 
-    if (fetchError) {
-      console.warn('Failed to fetch inserted record:', fetchError);
+    if (error) {
+      return { success: false, error: error.message };
     }
 
-    if (fetchedData) {
-      // Write audit entry (best effort)
-      try {
-        await logActivity({
-          action: 'requirement_created',
-          actorId: userId,
-          resourceType: 'requirement',
-          resourceId: fetchedData.id,
-          description: `Created requirement "${fetchedData.title}" (#${fetchedData.requirement_number})`,
-        });
-      } catch (auditErr) {
-        console.warn('Failed to log audit entry:', auditErr);
-      }
-
-      return { success: true, requirement: fetchedData };
+    // Write audit entry (best effort)
+    try {
+      await logActivity({
+        action: 'requirement_created',
+        actorId: userId,
+        resourceType: 'requirement',
+        resourceId: inserted.id,
+        description: `Created requirement "${inserted.title}" (#${inserted.requirement_number})`,
+      });
+    } catch {
+      // ignore
     }
 
-    // If we can't fetch it back, still return success since insert succeeded
-    console.log('Insert succeeded but could not fetch record back');
-    return { 
-      success: true,
-      error: 'Created successfully (could not fetch record back)'
-    };
+    return { success: true, requirement: inserted };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Failed to create requirement';
     console.error('Requirement creation error:', errorMsg, err);

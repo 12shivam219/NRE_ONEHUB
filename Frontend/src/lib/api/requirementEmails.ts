@@ -237,21 +237,10 @@ export async function getEmailSyncLogs(
  * Get unconfirmed email matches that need user review
  */
 export async function getUnconfirmedEmailMatches(userId: string): Promise<RequirementEmail[]> {
-  // Get user's requirements first
-  const { data: requirements, error: reqError } = await supabase
-    .from('requirements')
-    .select('id')
-    .eq('user_id', userId);
-
-  if (reqError || !requirements) return [];
-
-  const requirementIds = requirements.map((r: any) => r.id);
-
-  // Get emails that need confirmation
+  void userId;
   const { data, error } = await supabase
     .from('requirement_emails')
     .select('*')
-    .in('requirement_id', requirementIds)
     .eq('needs_user_confirmation', true)
     .order('sent_date', { ascending: false });
 

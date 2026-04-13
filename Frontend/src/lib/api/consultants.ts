@@ -15,14 +15,13 @@ export interface ConsultantWithLogs extends Consultant {
  * More efficient than offset-based for very large datasets (10K+ records)
  */
 export const getConsultantsPageCursor = async (options: {
-  userId: string;
+  userId?: string;
   limit?: number;
   cursor?: string; // ISO timestamp cursor for efficient pagination
   search?: string;
   status?: string;
 }): Promise<{ success: boolean; consultants?: ConsultantWithLogs[]; nextCursor?: string; error?: string }> => {
   const {
-    userId,
     limit = 20,
     cursor,
     search,
@@ -33,7 +32,6 @@ export const getConsultantsPageCursor = async (options: {
     let query = supabase
       .from('consultants')
       .select('*')
-      .eq('user_id', userId)
       .order('updated_at', { ascending: false });
 
     // Server-side filtering
@@ -116,14 +114,13 @@ export const getConsultants = async (
  * Optimized for 10K+ records with minimal client-side processing
  */
 export const getConsultantsPage = async (options: {
-  userId: string;
+  userId?: string;
   limit?: number;
   offset?: number;
   search?: string;
   status?: string;
 }): Promise<{ success: boolean; consultants?: ConsultantWithLogs[]; total?: number; error?: string }> => {
   const {
-    userId,
     limit = 20,
     offset = 0,
     search,
@@ -134,7 +131,6 @@ export const getConsultantsPage = async (options: {
     let query = supabase
       .from('consultants')
       .select('*', { count: 'exact' })
-      .eq('user_id', userId)
       .order('updated_at', { ascending: false });
 
     // Server-side filtering
@@ -316,17 +312,19 @@ export const deleteConsultant = async (
  * Result: Better relevance ranking, faster search performance
  */
 export const searchConsultants = async (
-  userId: string,
+  _userId: string,
   searchTerm: string,
   limit: number = 50
 ): Promise<{ success: boolean; consultants?: Consultant[]; error?: string }> => {
   try {
+    // Shared workspace: search across all consultants without user scoping.
+    const term = `%${searchTerm.trim().slice(0, 120)}%`;
     const { data, error } = await supabase
-      .rpc('search_consultants', {
-        p_user_id: userId,
-        p_search_term: searchTerm,
-        p_limit: limit,
-      });
+      .from('consultants')
+      .select('*')
+      .or(`name.ilike.${term},email.ilike.${term},primary_skills.ilike.${term}`)
+      .order('updated_at', { ascending: false })
+      .limit(limit);
 
     if (error) {
       if (process.env.NODE_ENV === 'development') {

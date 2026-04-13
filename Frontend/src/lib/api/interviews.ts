@@ -20,7 +20,7 @@ export interface InterviewWithLogs extends Omit<Interview, 'created_by' | 'updat
 }
 
 export const getInterviewsPageCursor = async (options: {
-  userId: string;
+  userId?: string;
   limit?: number;
   cursor?: string; // ISO timestamp cursor for efficient pagination
   includeCount?: boolean;
@@ -32,7 +32,6 @@ export const getInterviewsPageCursor = async (options: {
   orderDir?: 'asc' | 'desc';
 }): Promise<{ success: boolean; interviews?: InterviewWithLogs[]; nextCursor?: string; error?: string }> => {
   const {
-    userId,
     limit = 20,
     cursor,
     status,
@@ -46,8 +45,7 @@ export const getInterviewsPageCursor = async (options: {
   try {
     let query = supabase
       .from('interviews')
-      .select('*')
-      .eq('user_id', userId);
+      .select('*');
 
     // Prefer normalized numeric round ordering when available, then the requested order
     // Use 'round_index' (added by migration) for stable round ordering; fallback ordering by orderBy still applied after.
@@ -104,7 +102,7 @@ export const getInterviewsPageCursor = async (options: {
 };
 
 export const getInterviewsPage = async (options: {
-  userId: string;
+  userId?: string;
   limit?: number;
   offset?: number;
   includeCount?: boolean;
@@ -116,7 +114,6 @@ export const getInterviewsPage = async (options: {
   orderDir?: 'asc' | 'desc';
 }): Promise<{ success: boolean; interviews?: InterviewWithLogs[]; total?: number; error?: string }> => {
   const {
-    userId,
     limit = 20,
     offset = 0,
     includeCount = false,
@@ -133,7 +130,6 @@ export const getInterviewsPage = async (options: {
     let query = supabase
       .from('interviews')
       .select('*', { count: countMode as 'exact' | undefined })
-      .eq('user_id', userId)
       // Prefer normalized round ordering when available
       .order('round_index', { ascending: true })
       .order(orderBy, { ascending: orderDir === 'asc' });

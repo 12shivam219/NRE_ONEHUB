@@ -44,16 +44,10 @@ const buildKey = (q: RequirementsQuery) => {
 };
 
 const fetchPage = async (q: RequirementsQuery): Promise<RequirementsPageData> => {
-  // If userId is not available yet, return empty state rather than hanging
-  // This allows the component to show the proper empty state instead of infinite loading
-  if (!q.userId) {
-    return { requirements: [], hasNextPage: false };
-  }
-
   const orderByColumn = q.sortBy === 'date' ? 'created_at' : q.sortBy === 'company' ? 'company' : 'created_at';
 
   const res = await getRequirementsPage({
-    userId: q.userId,
+    // Shared workspace: do not scope by user_id
     limit: q.pageSize,
     offset: q.page * q.pageSize,
     search: q.search || undefined,
@@ -93,23 +87,13 @@ export function useRequirementsPage(query: RequirementsQuery) {
     }
   );
 
-  // If userId is missing, set data immediately to empty state to prevent infinite loading
-  useEffect(() => {
-    if (!query.userId && !swr.data) {
-      swr.mutate(
-        { requirements: [], hasNextPage: false },
-        { revalidate: false }
-      );
-    }
-  }, [query.userId, swr]);
-
   useEffect(() => {
     const maybeHydrateFromCache = async () => {
-      if (!query.userId) return;
       if (navigator.onLine) return;
       if (swr.data) return;
 
-      const cached = await getCachedRequirements(query.userId, true);
+      const cacheKey = query.userId || 'shared';
+      const cached = await getCachedRequirements(cacheKey, true);
       if (cached && cached.length > 0) {
         swr.mutate(
           {
@@ -126,11 +110,11 @@ export function useRequirementsPage(query: RequirementsQuery) {
 
   useEffect(() => {
     const save = async () => {
-      if (!query.userId) return;
       if (!swr.data?.requirements) return;
       if (!navigator.onLine) return;
       if (query.page !== 0) return;
-      await cacheRequirements(swr.data.requirements as unknown as CachedRequirement[], query.userId);
+      const cacheKey = query.userId || 'shared';
+      await cacheRequirements(swr.data.requirements as unknown as CachedRequirement[], cacheKey);
     };
 
     void save();

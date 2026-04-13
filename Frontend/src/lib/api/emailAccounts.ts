@@ -24,15 +24,15 @@ interface EmailAccount {
  * Get all email accounts for a user
  */
 export const getEmailAccounts = async (
-  userId: string
+  _userId: string
 ): Promise<{ success: boolean; accounts?: EmailAccount[]; error?: string }> => {
   try {
     const { data, error } = await retryAsync(
       async () =>
         supabase
           .from('email_accounts')
-          .select('*')
-          .eq('user_id', userId)
+          // Shared workspace: return all active accounts, but do not expose encrypted passwords to the client.
+          .select('id, user_id, email_address, email_limit_per_rotation, is_active, order_index, created_at, updated_at')
           .eq('is_active', true)
           .order('order_index', { ascending: true }),
       {
@@ -44,7 +44,7 @@ export const getEmailAccounts = async (
     if (error) {
       const appError = handleApiError(error, {
         component: 'getEmailAccounts',
-        userId,
+        userId: _userId,
       });
       return { success: false, error: appError.message };
     }

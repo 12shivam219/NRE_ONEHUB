@@ -663,19 +663,18 @@ export const sendBulkEmailCampaign = async (
  * Get user's campaigns
  */
 export const getUserCampaigns = async (
-  userId: string
+  _userId: string
 ): Promise<{ success: boolean; campaigns?: BulkEmailCampaign[]; error?: string }> => {
   try {
     const { data, error } = await supabase
       .from('bulk_email_campaigns')
       .select('*')
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) {
       const appError = handleApiError(error, {
         component: 'getUserCampaigns',
-        userId,
+        userId: _userId,
       });
       return { success: false, error: appError.message };
     }

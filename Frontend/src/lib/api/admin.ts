@@ -56,7 +56,8 @@ const logAdminAction = async (
     ) as ActivityLog['details'];
 
     const payload: ActivityLogInsert = {
-      user_id: null,
+      // Store admin as actor so RLS can enforce user_id = auth.uid()
+      user_id: context.adminId ?? null,
       action,
       resource_type: context.resourceType ?? null,
       resource_id: context.resourceId ?? null,

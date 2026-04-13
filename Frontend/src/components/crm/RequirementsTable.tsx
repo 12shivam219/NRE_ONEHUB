@@ -14,7 +14,7 @@ import type { Database, RequirementStatus } from '../../lib/database.types';
 import { useAuth } from '../../hooks/useAuth';
 import { getInterviewsByRequirementGrouped, deleteInterview } from '../../lib/api/interviews';
 import { getConsultants } from '../../lib/api/consultants';
-import { subscribeToInterviews, type RealtimeUpdate } from '../../lib/api/realtimeSync';
+import { subscribeToAllInterviews, type RealtimeUpdate } from '../../lib/api/realtimeSync';
 import { InterviewDetailModal } from './InterviewDetailModal';
 import { InterviewPipeline } from './InterviewPipeline';
 import Box from '@mui/material/Box';
@@ -546,7 +546,7 @@ export const RequirementsTable = memo(({
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = subscribeToInterviews(user.id, (update: RealtimeUpdate<Interview>) => {
+    const unsubscribe = subscribeToAllInterviews((update: RealtimeUpdate<Interview>) => {
       setReqInterviews(prev => {
         const updated = { ...prev };
         
@@ -596,7 +596,7 @@ export const RequirementsTable = memo(({
 
   const handleDeleteInterview = async (interviewId: string) => {
     try {
-      const result = await deleteInterview(interviewId);
+      const result = await deleteInterview(interviewId, user?.id);
       if (result.success) {
         // Refresh the expanded requirement
         const reqId = Object.keys(reqInterviews).find(key => 

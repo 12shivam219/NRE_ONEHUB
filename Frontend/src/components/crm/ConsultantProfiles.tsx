@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { Search, X } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { deleteConsultant, getConsultantsPage } from '../../lib/api/consultants';
-import { subscribeToConsultants } from '../../lib/api/realtimeSync';
+import { subscribeToAllConsultants } from '../../lib/api/realtimeSync';
 import { debounce } from '../../lib/utils';
 import { ConsultantDetailModal } from './ConsultantDetailModal';
 import { ErrorAlert } from '../common/ErrorAlert';
@@ -88,7 +88,7 @@ export const ConsultantProfiles = memo(() => {
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     if (user) {
-      unsubscribe = subscribeToConsultants(user.id, (update: RealtimeUpdate<Consultant>) => {
+      unsubscribe = subscribeToAllConsultants((update: RealtimeUpdate<Consultant>) => {
         if (update.type === 'INSERT') {
           loadConsultants(0);
           showToast({

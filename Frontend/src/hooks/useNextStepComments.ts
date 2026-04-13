@@ -164,8 +164,7 @@ export const useNextStepComments = (requirementId: string): UseNextStepCommentsR
         const { error: deleteError } = await supabase
           .from('next_step_comments')
           .delete()
-          .eq('id', commentId)
-          .eq('user_id', user?.id); // Only allow deletion of own comments
+          .eq('id', commentId);
 
         if (deleteError) throw deleteError;
 
@@ -177,7 +176,7 @@ export const useNextStepComments = (requirementId: string): UseNextStepCommentsR
         throw err;
       }
     },
-    [user?.id]
+    []
   );
 
   return {
