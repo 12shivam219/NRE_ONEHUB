@@ -36,9 +36,10 @@ export const checkPasswordWithHibp = async (
 
     const functionUrl = import.meta.env.VITE_HIBP_FUNCTION_URL?.trim();
     if (!functionUrl) {
+      // Skip HIBP check if not configured - allow signup but don't check breaches
       return {
         isSecure: true,
-        error: 'Password breach check is not configured (set VITE_HIBP_FUNCTION_URL).',
+        error: undefined,
       };
     }
 

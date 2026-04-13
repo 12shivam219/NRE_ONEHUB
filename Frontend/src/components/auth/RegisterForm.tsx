@@ -24,7 +24,7 @@ const isStrongPassword = (pwd: string): boolean => {
 
 const getPasswordStrengthFeedback = (pwd: string): string[] => {
   const feedback = [];
-  if (pwd.length < 12) feedback.push('At least 12 characters');
+  if (pwd.length < 8) feedback.push('At least 8 characters');
   if (!/[A-Z]/.test(pwd)) feedback.push('One uppercase letter');
   if (!/[a-z]/.test(pwd)) feedback.push('One lowercase letter');
   if (!/\d/.test(pwd)) feedback.push('One number');
