@@ -13,10 +13,30 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-);
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_ANON_KEY;
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+} else {
+  console.warn(
+    '⚠️  api-routes-v3: Supabase not configured. Embedding/search/analytics routes need SUPABASE_URL and a service key.'
+  );
+}
+
+function requireSupabase(res) {
+  if (!supabase) {
+    res.status(503).json({
+      success: false,
+      error: 'Supabase is not configured on this server',
+    });
+    return false;
+  }
+  return true;
+}
 
 const router = express.Router();
 
@@ -100,6 +120,8 @@ router.post('/api/embeddings/generate', async (req, res) => {
     res.status(400).json({ error: 'requirementId and userId required' });
     return;
   }
+
+  if (!requireSupabase(res)) return;
 
   try {
     console.log(`[API] Generating embedding for requirement ${requirementId}`);
@@ -237,6 +259,8 @@ router.post('/api/search/similar', async (req, res) => {
     return;
   }
 
+  if (!requireSupabase(res)) return;
+
   try {
     console.log(`[API] Searching similar requirements for ${requirementId}`);
 
@@ -292,6 +316,8 @@ router.post('/api/search/duplicates', async (req, res) => {
     return;
   }
 
+  if (!requireSupabase(res)) return;
+
   try {
     console.log(`[API] Checking duplicates for ${requirementId}`);
 
@@ -332,6 +358,8 @@ router.post('/api/analytics/quality-metrics', async (req, res) => {
     res.status(400).json({ error: 'userId required' });
     return;
   }
+
+  if (!requireSupabase(res)) return;
 
   try {
     console.log(`[API] Getting quality metrics for user ${userId}`);

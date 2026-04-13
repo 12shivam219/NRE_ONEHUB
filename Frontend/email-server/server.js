@@ -4,6 +4,10 @@ import nodemailer from 'nodemailer';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from 'node:crypto';
+
+// Load environment variables FIRST before any other modules that use env vars
+dotenv.config();
+
 import bodyParser from 'body-parser';
 import rateLimit from 'express-rate-limit';
 import sanitizeHtml from 'sanitize-html';
@@ -14,8 +18,6 @@ import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { RedisStore } from 'rate-limit-redis';
 import apiRoutesV3 from './api-routes-v3.js';
-
-dotenv.config();
 
 const app = express();
 app.use(helmet());
