@@ -39,7 +39,6 @@ from .auth_utils import (
     require_supabase_user_id,
     resolve_onlyoffice_callback_public_base,
     resolve_safe_automation_download_path,
-    resolve_safe_resume_path_for_email,
     verify_onlyoffice_callback_token,
     verify_optional_text_processor_api_key,
     verify_uuid,
@@ -53,7 +52,6 @@ from utils.batch_resume_injector import BatchResumeInjector
 from utils.validators import InputValidator
 from utils.deduplicator import PointDeduplicator
 from utils.gemini_points_generator import GeminiPointsGenerator
-from utils.email_sender import get_email_sender
 
 import requests
 from io import BytesIO
@@ -568,66 +566,6 @@ async def generate_points(request: JobDescriptionRequest) -> ApiResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== TAB 6: Email Sending ====================
-
-class EmailRequest(BaseModel):
-    recipients: List[str]
-    subject: str
-    body: str
-    resume_path: str
-    provider: str  # "gmail" or "outlook"
-    sender_email: Optional[str] = None
-    sender_password: Optional[str] = None
-
-@app.post("/api/send-email", dependencies=[Depends(verify_optional_text_processor_api_key)])
-async def send_email(request: EmailRequest, background_tasks: BackgroundTasks) -> ApiResponse:
-    """Send resume via email"""
-    try:
-        sender = get_email_sender(
-            request.provider,
-            sender_email=request.sender_email,
-            app_password=request.sender_password,
-        )
-        
-        if not sender:
-            raise ValueError("Failed to initialize email sender")
-
-        safe_resume_path = resolve_safe_resume_path_for_email(request.resume_path, PROJECT_ROOT)
-        
-        # Read resume file
-        with open(safe_resume_path, 'rb') as f:
-            resume_content = f.read()
-        
-        success_count = 0
-        failed_recipients = []
-        
-        for recipient in request.recipients:
-            try:
-                success = sender.send_email(
-                    recipient=recipient,
-                    subject=request.subject,
-                    body=request.body,
-                    attachments=[(safe_resume_path.name, io.BytesIO(resume_content))]
-                )
-                if success:
-                    success_count += 1
-                else:
-                    failed_recipients.append(recipient)
-            except Exception as e:
-                logger.error(f"Error sending to {recipient}: {e}")
-                failed_recipients.append(recipient)
-        
-        return ApiResponse(
-            success=True,
-            data={
-                "sent": success_count,
-                "total": len(request.recipients),
-                "failed_recipients": failed_recipients
-            }
-        )
-    
-    except Exception as e:
-        logger.error(f"Error sending emails: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== UTILITY ENDPOINTS ====================
 

@@ -125,38 +125,6 @@ def resolve_safe_automation_download_path(file_id: str, output_folder: Path) -> 
     return resolved
 
 
-def resolve_safe_resume_path_for_email(resume_path: str, project_root: Path) -> Path:
-    """Restrict email attachments to filenames under known backend upload directories."""
-    if not resume_path or len(resume_path) > 500:
-        raise HTTPException(status_code=400, detail="Invalid resume path")
-
-    raw = resume_path.replace("\\", "/").strip()
-    if ".." in raw:
-        raise HTTPException(status_code=400, detail="Invalid resume path")
-
-    name = Path(resume_path).name
-    if not name or name in (".", ".."):
-        raise HTTPException(status_code=400, detail="Invalid resume path")
-
-    allowed_bases = [
-        project_root / "Backend" / "resumes_uploaded",
-        project_root / "Backend" / "resumes",
-        project_root / "Backend" / "temp_automation",
-    ]
-
-    for base in allowed_bases:
-        base_resolved = base.resolve()
-        candidate = (base / name).resolve()
-        try:
-            candidate.relative_to(base_resolved)
-        except ValueError:
-            continue
-        if candidate.is_file():
-            return candidate
-
-    raise HTTPException(status_code=404, detail="Resume file not found")
-
-
 def verify_uuid(value: str, field_name: str = "id") -> str:
     try:
         u = uuid.UUID(str(value))
