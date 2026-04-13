@@ -108,7 +108,7 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
 
             {/* Form */}
             <form onSubmit={forgotMode ? handleForgotSubmit : handleSubmit} className="space-y-3 md:space-y-3.5">
-              {error && (
+              {error && !isEmailError && !isPasswordError && (
                 <div
                   className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
                   role="alert"
