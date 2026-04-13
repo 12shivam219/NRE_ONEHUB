@@ -13,7 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { RedisStore } from 'rate-limit-redis';
-import apiRoutesV3 from './api-routes-v3.ts';
+import apiRoutesV3 from './api-routes-v3.js';
 
 dotenv.config();
 
