@@ -76,6 +76,25 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Try to get fresh user profile from the database (background refresh)
         const freshUser = await getFreshUserData();
         if (freshUser) {
+          // Block app access until the account is approved.
+          if (freshUser.status !== 'approved') {
+            try {
+              await supabase.auth.signOut({ scope: 'local' });
+            } catch {
+              // Ignore
+            }
+            setUser(null);
+            clearSentryUser();
+            sessionStorage.removeItem('user');
+            localStorage.removeItem('user');
+            if (supabaseAuthStorageKey) {
+              sessionStorage.removeItem(supabaseAuthStorageKey);
+              localStorage.removeItem(supabaseAuthStorageKey);
+            }
+            setIsLoading(false);
+            return;
+          }
+
           setUser(freshUser);
           // Set Sentry user context for error tracking
           setSentryUser(freshUser.id, freshUser.email, freshUser.full_name);
@@ -99,19 +118,20 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
-        // Construct a minimal user shape from the auth user if the profile row is not yet available.
-        const minimalUser: User = {
-          id: authUser.id,
-          email: authUser.email || '',
-          full_name: authUser.user_metadata?.full_name || '',
-          role: 'user',
-          status: 'pending_verification',
-          email_verified: authUser.email_confirmed_at ? true : false,
-          origin_ip: null,
-        };
-        setUser(minimalUser);
-        // Set Sentry user context for error tracking
-        setSentryUser(minimalUser.id, minimalUser.email, minimalUser.full_name);
+        // If auth user exists but profile is missing, force sign-out to avoid bypassing RBAC/status checks.
+        try {
+          await supabase.auth.signOut({ scope: 'local' });
+        } catch {
+          // Ignore
+        }
+        setUser(null);
+        clearSentryUser();
+        sessionStorage.removeItem('user');
+        localStorage.removeItem('user');
+        if (supabaseAuthStorageKey) {
+          sessionStorage.removeItem(supabaseAuthStorageKey);
+          localStorage.removeItem(supabaseAuthStorageKey);
+        }
         setIsLoading(false);
       } catch {
         // Silently handle validation error
@@ -139,6 +159,12 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     lastUserRefreshAtRef.current = Date.now();
     const freshUser = await getFreshUserData();
     if (freshUser) {
+      if (freshUser.status !== 'approved') {
+        await authLogout();
+        setUser(null);
+        clearSentryUser();
+        return;
+      }
       setUser((prev) => {
         if (!prev) return freshUser;
         const isSameUser =

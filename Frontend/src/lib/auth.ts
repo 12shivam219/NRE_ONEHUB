@@ -69,6 +69,19 @@ interface LogAuthEventResponse {
   ip?: string;
 }
 
+const formatBlockedStatusMessage = (status: UserStatus): string => {
+  switch (status) {
+    case 'pending_verification':
+      return 'Your account is pending email verification.';
+    case 'pending_approval':
+      return 'Your account is pending admin approval.';
+    case 'rejected':
+      return 'Your account has been rejected. Please contact support.';
+    default:
+      return `Account ${status.replace('_', ' ')}`;
+  }
+};
+
 const logAuthEvent = async (payload: LogAuthEventPayload): Promise<LogAuthEventResponse | null> => {
   try {
     const { data, error } = await supabase.functions.invoke('log-auth-event', {
@@ -154,8 +167,8 @@ export const register = async (
       .from('users')
       .insert({
         id: authData.user.id,
-        email,
-        full_name: fullName,
+        email: trimmedEmail,
+        full_name: trimmedFullName,
         role: 'user',
         status: 'pending_verification',
         email_verified: false,
@@ -174,6 +187,15 @@ export const register = async (
     });
 
     const originIp = logResult?.ip ?? user.origin_ip ?? null;
+
+    // IMPORTANT: Prevent immediate app access after signup.
+    // If Supabase email confirmation is disabled, signUp can create an active session.
+    // We require admin approval / verification before allowing app access.
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // ignore
+    }
 
     return {
       success: true,
@@ -299,12 +321,33 @@ export const login = async (
       // Continue even if user profile lookup fails
     }
 
-    // Check account status only if user profile exists
-    if (user && user.status && user.status !== 'approved' && user.status !== 'pending_verification') {
-      await logFailedLogin({ userId: authData.user.id, clientInfo, reason: `Account ${user.status}` });
+    // Require a profile row for RBAC/status checks. If missing, block access.
+    if (!user) {
+      await logFailedLogin({ userId: authData.user.id, clientInfo, reason: 'User profile missing' });
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        // ignore
+      }
       return {
         success: false,
-        error: `Account ${user.status.replace('_', ' ')}`
+        requiresVerification: true,
+        error: 'Account setup is incomplete. Please contact support.',
+      };
+    }
+
+    // Check account status
+    if (user && user.status && user.status !== 'approved') {
+      await logFailedLogin({ userId: authData.user.id, clientInfo, reason: `Account ${user.status}` });
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        // ignore
+      }
+      return {
+        success: false,
+        requiresVerification: true,
+        error: formatBlockedStatusMessage(user.status),
       };
     }
 
@@ -319,13 +362,13 @@ export const login = async (
     // Store user data in sessionStorage (cleared when tab closes)
     // SECURITY: Use sessionStorage instead of localStorage to prevent persistent token storage
     // Supabase session is managed automatically via secure cookies
-    const userData = user || {
-      id: authData.user.id,
-      email: authData.user.email || '',
-      full_name: authData.user.user_metadata?.full_name || '',
-      role: 'user',
-      status: 'pending_verification',
-      email_verified: authData.user.email_confirmed_at ? true : false,
+    const userData = {
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name,
+      role: user.role,
+      status: user.status,
+      email_verified: user.email_verified,
       origin_ip: resolvedOriginIp,
     };
 

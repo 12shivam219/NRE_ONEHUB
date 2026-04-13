@@ -1,7 +1,7 @@
+// @ts-ignore - URL imports are resolved by Deno at runtime
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-ignore - URL imports are resolved by Deno at runtime
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import type { Env } from "../types/env";
-
-declare const Deno: Env;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,7 +24,7 @@ const adminClient = createClient(supabaseUrl, serviceRoleKey, {
   },
 });
 
-Deno.serve(async (req) => {
+serve(async (req: Request) => {
   // Handle CORS
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -43,24 +43,32 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Use admin client to check if email exists in auth.users
-    const { data: users, error: listError } = await adminClient.auth.admin.listUsers();
+    // Use admin client to check if email exists in auth.users.
+    // NOTE: listUsers is paginated and returns { users: [...] }.
+    const normalized = email.toLowerCase();
+    const perPage = 1000;
+    let page = 1;
+    let emailExists = false;
 
-    if (listError) {
-      console.error("Error listing users:", listError);
-      return new Response(
-        JSON.stringify({ error: "Unable to verify email" }),
-        {
+    while (!emailExists) {
+      const { data, error: listError } = await adminClient.auth.admin.listUsers({ page, perPage });
+
+      if (listError) {
+        console.error("Error listing users:", listError);
+        return new Response(JSON.stringify({ error: "Unable to verify email" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
+        });
+      }
 
-    // Check if email exists (case-insensitive)
-    const emailExists = users.some(
-      (user) => user.email?.toLowerCase() === email.toLowerCase()
-    );
+      // esm.sh typings can be loose here; keep this function strict-safe.
+      const users = (data?.users ?? []) as Array<{ email?: string | null }>;
+      emailExists = users.some((user) => (user.email ?? "").toLowerCase() === normalized);
+
+      // If we've reached the last page (fewer than perPage users), stop.
+      if (users.length < perPage) break;
+      page += 1;
+    }
 
     return new Response(
       JSON.stringify({ exists: emailExists }),
