@@ -18,6 +18,7 @@ import dotenv from 'dotenv';
 import sanitizeHtml from 'sanitize-html';
 import { createClient } from '@supabase/supabase-js';
 import { encryptPassword, decryptPassword, isEncrypted } from './encryption.js';
+import { resolveRedisUrl, bullMqSkipVersionCheck } from './redis-url.js';
 
 dotenv.config();
 
@@ -26,10 +27,24 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // ==========================================
 // Redis Connection Setup
 // ==========================================
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const REDIS_URL = resolveRedisUrl();
 const connection = new IORedis(REDIS_URL, {
   maxRetriesPerRequest: null, // Required for BullMQ
 });
+
+connection.on('error', (err) => {
+  console.error('Redis connection error:', err.message);
+});
+
+function redactRedisUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.password) u.password = '***';
+    return u.toString();
+  } catch {
+    return '(invalid REDIS_URL)';
+  }
+}
 
 // ==========================================
 // Supabase Client Setup
@@ -324,7 +339,7 @@ const emailWorker = new Worker('bulk-email-queue', async (job) => {
     console.error(`[Worker] Job failed:`, error);
     throw error;
   }
-}, { connection });
+}, { connection, skipVersionCheck: bullMqSkipVersionCheck() });
 
 // Handle worker events
 emailWorker.on('completed', (job) => {
@@ -387,6 +402,6 @@ process.on('uncaughtException', (error) => {
 // ==========================================
 console.log('\n🚀 Email Worker Process Started');
 console.log(`📦 Listening to BullMQ queue: bulk-email-queue`);
-console.log(`🔗 Redis URL: ${REDIS_URL}`);
+console.log(`🔗 Redis: ${redactRedisUrl(REDIS_URL)}`);
 console.log(`📧 Email accounts loaded: ${emailAccounts.size}`);
 console.log('');

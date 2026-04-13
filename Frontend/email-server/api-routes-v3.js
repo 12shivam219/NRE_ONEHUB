@@ -7,9 +7,10 @@
 import express from 'express';
 import axios from 'axios';
 import { Queue } from 'bullmq';
-import Redis from 'ioredis';
+import IORedis from 'ioredis';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { resolveRedisUrl, bullMqSkipVersionCheck } from './redis-url.js';
 
 dotenv.config();
 
@@ -40,18 +41,28 @@ function requireSupabase(res) {
 
 const router = express.Router();
 
-const redisConnection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-};
+// Same resolution as server.js / worker.js (handles redis-cli "-u redis://..." paste mistakes).
+const REDIS_URL = resolveRedisUrl();
 
-const redis = new Redis(redisConnection);
+const redisConnection = new IORedis(REDIS_URL, {
+  maxRetriesPerRequest: null,
+  enableKeepAlive: true,
+  keepAliveInitialDelayMs: 60000,
+  retryStrategy: (times) => Math.min(50 * Math.pow(2, times), 2000),
+});
+
+redisConnection.on('error', (err) => {
+  console.error('[api-routes-v3] Redis error:', err.message);
+});
 
 const embeddingQueue = new Queue('embeddings', {
   connection: redisConnection,
+  skipVersionCheck: bullMqSkipVersionCheck(),
 });
 
-const EMBEDDING_SERVICE_URL = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:3001';
+const _emailServerPort = process.env.EMAIL_SERVER_PORT || 3001;
+const EMBEDDING_SERVICE_URL =
+  process.env.EMBEDDING_SERVICE_URL || `http://localhost:${_emailServerPort}`;
 
 /**
  * POST /api/jobs/extract

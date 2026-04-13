@@ -17,6 +17,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { RedisStore } from 'rate-limit-redis';
+import { resolveRedisUrl, bullMqSkipVersionCheck } from './redis-url.js';
 import apiRoutesV3 from './api-routes-v3.js';
 
 const app = express();
@@ -25,7 +26,7 @@ const PORT = process.env.EMAIL_SERVER_PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Redis Connection with Connection Pooling
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const REDIS_URL = resolveRedisUrl();
 const connection = new IORedis(REDIS_URL, {
   maxRetriesPerRequest: null,
   enableKeepAlive: true,
@@ -40,9 +41,14 @@ const connection = new IORedis(REDIS_URL, {
   },
 });
 
+connection.on('error', (err) => {
+  console.error('Redis connection error:', err.message);
+});
+
 // Create Persistent Email Queue with optimized settings
 const emailQueue = new Queue('bulk-email-queue', {
   connection,
+  skipVersionCheck: bullMqSkipVersionCheck(),
   settings: {
     lockDuration: 30000,
     lockRenewTime: 15000,
@@ -734,6 +740,20 @@ const server = app.listen(PORT, async () => {
   }
 
   console.log('');
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `\n❌ Port ${PORT} is already in use. Another process is bound to that port (often a second email-server or IDE terminal).\n` +
+        `   • Stop the other server, or set EMAIL_SERVER_PORT to a free port (e.g. 3002) in email-server/.env and restart.\n` +
+        `   • Windows (find PID): netstat -ano | findstr :${PORT}\n` +
+        `   • Then: taskkill /PID <pid> /F   (only if you intend to stop that process)\n`
+    );
+    process.exit(1);
+  }
+  console.error('❌ HTTP server error:', err);
+  process.exit(1);
 });
 
 // ==========================================

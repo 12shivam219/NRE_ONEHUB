@@ -3,12 +3,13 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import Redis from 'ioredis';
 import pLimit from 'p-limit';
+import { normalizeRedisUrl } from './redis-url.js';
 
 dotenv.config();
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-const REDIS_URL = process.env.REDIS_URL;
+const REDIS_URL = normalizeRedisUrl(process.env.REDIS_URL);
 
 // Initialize Redis
 let redis = null;

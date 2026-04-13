@@ -15,7 +15,8 @@
     "dev:agent": "node --watch job-extraction-agent.js",
     "start:all": "concurrently \"npm start\" \"npm run start:worker\" \"npm run start:scheduler\"",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:worker\" \"npm run dev:scheduler\"",
-    "test": "node test-all-scenarios.js"
+    "test": "node test-all-scenarios.js",
+    "test:redis": "node scripts/redis-smoke-test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.37.0",
