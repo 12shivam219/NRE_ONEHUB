@@ -12,8 +12,8 @@ interface RegisterFormProps {
 
 // SECURITY: Password validation helper
 const isStrongPassword = (pwd: string): boolean => {
-  // Requirements: at least 12 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
-  const minLength = pwd.length >= 12;
+  // Requirements: at least 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
+  const minLength = pwd.length >= 8;
   const hasUppercase = /[A-Z]/.test(pwd);
   const hasLowercase = /[a-z]/.test(pwd);
   const hasNumber = /\d/.test(pwd);
@@ -44,25 +44,26 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
   const [hibpMessage, setHibpMessage] = useState('');
   const [hibpError, setHibpError] = useState('');
 
-  const handlePasswordChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newPassword = e.target.value;
     setPassword(newPassword);
     setError('');
     setHibpMessage('');
     setHibpError('');
+  };
 
-    if (!newPassword) return;
+  const handlePasswordBlur = async () => {
+    if (!password) return;
 
-    // First validate strength
-    const strengthCheck = validatePasswordStrength(newPassword);
+    // Validate strength
+    const strengthCheck = validatePasswordStrength(password);
     if (!strengthCheck.isValid) {
-      setError(strengthCheck.errors[0]);
-      return;
+      return; // Show strength feedback but don't error
     }
 
-    // If password meets strength requirements, check HIBP
+    // Only check HIBP if password is strong
     setIsCheckingPassword(true);
-    const hibpResult = await checkPasswordWithHibp(newPassword);
+    const hibpResult = await checkPasswordWithHibp(password);
     setIsCheckingPassword(false);
 
     if (hibpResult.error) {
@@ -196,10 +197,10 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
                 id="register-password"
                 value={password}
                 onChange={handlePasswordChange}
+                onBlur={handlePasswordBlur}
                 required
-                minLength={12}
-                disabled={isCheckingPassword}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm transition sm:rounded-xl sm:px-4 sm:py-3 sm:text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200 disabled:opacity-50"
+                minLength={8}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm transition sm:rounded-xl sm:px-4 sm:py-3 sm:text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
                 placeholder="••••••••••••"
               />
               {isCheckingPassword && (
@@ -228,7 +229,7 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
                 </div>
               )}
               {hibpMessage && <p className="mt-1 text-xs text-emerald-600 font-medium sm:text-sm">{hibpMessage}</p>}
-              {hibpError && <p className="mt-1 text-xs text-slate-500 sm:text-sm">{hibpError}</p>}
+              {hibpError && !hibpMessage && <p className="mt-1 text-xs text-slate-600 font-medium sm:text-sm">ℹ️ {hibpError}</p>}
             </div>
 
             <div className="space-y-1 sm:space-y-1.5">
@@ -240,7 +241,7 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                minLength={12}
+                minLength={8}
                 className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[0.75rem] text-slate-900 shadow-sm transition sm:rounded-lg sm:px-3 sm:py-2 sm:text-[0.8125rem] focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
                 placeholder="••••••••••••"
               />
