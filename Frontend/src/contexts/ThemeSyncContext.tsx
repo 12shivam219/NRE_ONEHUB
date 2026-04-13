@@ -234,8 +234,8 @@ export const ThemeSyncProvider = ({ children }: { children: ReactNode }) => {
       if (!audioContextRef.current) {
         try {
           audioContextRef.current = new AudioContext();
-        } catch (error) {
-          console.warn('AudioContext unavailable', error);
+        } catch {
+          // AudioContext unavailable - feature will be disabled silently
         }
       } else if (audioContextRef.current.state === 'suspended') {
         void audioContextRef.current.resume().catch(() => undefined);

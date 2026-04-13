@@ -29,14 +29,14 @@ export const SyncErrorHandler = () => {
 
         // Show toast if new failures detected
         if (failedItems.length > 0) {
-          console.warn(`[SyncErrorHandler] ${failedItems.length} failed sync item(s) detected`);
+          // Failed sync items detected
         }
 
         if (unresolvedConflicts.length > 0) {
-          console.warn(`[SyncErrorHandler] ${unresolvedConflicts.length} unresolved conflict(s) detected`);
+          // Unresolved conflicts detected
         }
-      } catch (error) {
-        console.error('Failed to check sync errors:', error);
+      } catch {
+        // Silently handle sync error check
       }
     };
 
@@ -98,8 +98,8 @@ export const SyncErrorHandler = () => {
       // record telemetry
       try {
         await recordAnalytics('conflict_resolved', { conflictId, choice });
-      } catch (err) {
-        console.debug('[analytics] conflict_resolved failed', err);
+      } catch {
+        // Silently handle analytics error
       }
       showToast({
         type: 'info',
@@ -111,8 +111,8 @@ export const SyncErrorHandler = () => {
       setConflicts(unresolvedConflicts);
       // notify other UI
       window.dispatchEvent(new CustomEvent('sync-queue-changed'));
-    } catch (err) {
-      console.error('Failed to resolve conflict', err);
+    } catch {
+      // Silently handle conflict resolution error
       showToast({ type: 'error', title: 'Resolve Failed', message: 'Could not resolve conflict. Try again.' });
     }
   };

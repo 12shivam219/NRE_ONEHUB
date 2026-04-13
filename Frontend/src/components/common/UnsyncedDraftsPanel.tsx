@@ -11,8 +11,8 @@ export function UnsyncedDraftsPanel(): JSX.Element | null {
       try {
         const all = await getAllDrafts();
         if (mounted) setDrafts(all);
-      } catch (err) {
-        console.error('Failed to load drafts for panel', err);
+      } catch {
+        // Silently handle draft loading error
       }
     })();
     return () => { mounted = false; };

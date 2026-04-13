@@ -58,7 +58,6 @@ export const useVoiceInput = (language: string = 'en-US'): UseVoiceInputReturn =
     recognition.onstart = () => {
       setIsListening(true);
       setError(null);
-      console.log('Voice input started');
     };
 
     recognition.onresult = (event: unknown) => {
@@ -80,7 +79,6 @@ export const useVoiceInput = (language: string = 'en-US'): UseVoiceInputReturn =
 
     recognition.onerror = (event: unknown) => {
       const errorMessage = (event as { error: string }).error || 'Unknown error';
-      console.error('Speech recognition error:', errorMessage);
       
       let userFriendlyMessage = 'Error: ';
       switch (errorMessage) {

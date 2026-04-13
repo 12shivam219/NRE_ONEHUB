@@ -84,8 +84,8 @@ const EmailHistoryPanel: React.FC<EmailHistoryPanelProps> = ({ requirementId }) 
       
       setRows(filtered);
       setRowCount(filtered.length);
-    } catch (error) {
-      console.error('Failed to fetch emails:', error);
+    } catch {
+      // Silently handle email fetch error
     } finally {
       setLoading(false);
     }
@@ -113,8 +113,8 @@ const EmailHistoryPanel: React.FC<EmailHistoryPanelProps> = ({ requirementId }) 
       setActionLoading(id);
       await confirmEmailMatch(id, 100);
       await fetchEmails(); 
-    } catch (error) {
-      console.error('Confirm failed', error);
+    } catch {
+      // Silently handle email confirmation error
     } finally {
       setActionLoading(null);
     }
@@ -127,8 +127,8 @@ const EmailHistoryPanel: React.FC<EmailHistoryPanelProps> = ({ requirementId }) 
       setActionLoading(id);
       await deleteEmailRecord(id);
       await fetchEmails();
-    } catch (error) {
-      console.error('Unlink failed', error);
+    } catch {
+      // Silently handle email unlink error
     } finally {
       setActionLoading(null);
     }

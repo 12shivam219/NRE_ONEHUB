@@ -241,8 +241,11 @@ export const AdminPage = () => {
     if (statsResult.success && statsResult.stats) {
       setApprovalStats(statsResult.stats);
     } else if (statsResult.error) {
-      // Use toast instead of alert for consistency
-      console.error(`Failed to load approval statistics: ${statsResult.error}`);
+      showToast({
+        type: 'error',
+        title: 'Failed to load approval statistics',
+        message: statsResult.error,
+      });
     }
 
     setApprovalsLoading(false);

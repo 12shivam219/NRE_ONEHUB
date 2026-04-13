@@ -266,8 +266,8 @@ const DocumentRow = memo(
           top: rect.bottom + 4,
           right: window.innerWidth - rect.right,
         });
-      } catch (error) {
-        console.warn('Failed to calculate menu position:', error);
+      } catch {
+        // Silently handle menu position calculation error
       }
     }, [isMenuOpen]);
 
@@ -473,8 +473,8 @@ const MobileDocumentCard = memo(
           top: rect.bottom + 4,
           right: window.innerWidth - rect.right,
         });
-      } catch (error) {
-        console.warn('Failed to calculate menu position:', error);
+      } catch {
+        // Silently handle menu position calculation error
       }
     }, [isMenuOpen]);
 
@@ -845,11 +845,11 @@ export const DocumentsPage = () => {
       pendingTimeoutsRef.current = [];
       
       // Cancel all in-progress uploads (Bug #15)
-      uploadAbortControllers.forEach((controller, fileId) => {
+      uploadAbortControllers.forEach((controller, _fileId) => {
         try {
           controller.abort();
-        } catch (error) {
-          console.warn(`Failed to abort upload for ${fileId}:`, error);
+        } catch {
+          // Silently handle abort error
         }
       });
       uploadAbortControllers.clear();
@@ -1001,22 +1001,17 @@ export const DocumentsPage = () => {
     };
 
     try {
-      console.log(`Deleting document: ${documentId}`);
-      
       // Delete the document from the API
       const result = await deleteDocument(documentId);
       if (!result.success) {
         throw new Error(result.error || "Failed to delete document");
       }
 
-      console.log(`Document deleted successfully from API: ${documentId}`);
-
       // Update the cache by filtering out the deleted document from all pages
       await mutateDocuments(
         (currentPages?: DocumentsPageData[]) => {
           if (!currentPages) return undefined;
           const filtered = removeFromPages(currentPages);
-          console.log(`Cache updated: removed document ${documentId}`, filtered);
           return filtered;
         },
         {
@@ -1025,16 +1020,12 @@ export const DocumentsPage = () => {
         }
       );
 
-      console.log(`Mutation completed, cache updated`);
-
       showToast({
         type: "success",
         title: "Document deleted",
         message: "The document has been removed.",
       });
     } catch (err) {
-      console.error('Delete failed, revalidating cache:', err);
-      
       // On error, revalidate to ensure the UI is in sync with server
       await mutateDocuments();
       
@@ -1074,8 +1065,6 @@ export const DocumentsPage = () => {
     };
 
     try {
-      console.log(`Deleting ${documentIds.length} documents:`, documentIds);
-      
       // Delete all documents in parallel
       const deletePromises = documentIds.map(id => deleteDocument(id));
       const results = await Promise.all(deletePromises);
@@ -1087,14 +1076,11 @@ export const DocumentsPage = () => {
         throw new Error(`Failed to delete ${failedCount} document(s)`);
       }
 
-      console.log(`All documents deleted successfully from API`);
-
       // Update the cache by filtering out the deleted documents from all pages
       await mutateDocuments(
         (currentPages?: DocumentsPageData[]) => {
           if (!currentPages) return undefined;
           const filtered = removeFromPages(currentPages);
-          console.log(`Cache updated: removed ${documentIds.length} documents`, filtered);
           return filtered;
         },
         {
@@ -1102,8 +1088,6 @@ export const DocumentsPage = () => {
           populateCache: true,
         }
       );
-
-      console.log(`Mutation completed, cache updated`);
 
       // Dispatch state updates only after mutation succeeds
       dispatch({ type: "closeBulkDeleteConfirm" });
@@ -1115,9 +1099,7 @@ export const DocumentsPage = () => {
         message: `${documentIds.length} document${documentIds.length > 1 ? "s" : ""} have been removed.`,
       });
     } catch (err) {
-      console.error('Bulk delete failed, revalidating cache:', err);
-      
-      // On error, revalidate to ensure the UI is in sync with server
+      // Silently handle bulk delete error and revalidate
       await mutateDocuments();
       
       // Still close dialog on error

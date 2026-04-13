@@ -39,10 +39,8 @@ export const invalidateUserCache = async (userId: string): Promise<void> => {
   for (const key of keysToInvalidate) {
     try {
       await deleteCacheValue(key);
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn(`Failed to invalidate cache key: ${key}`, err);
-      }
+    } catch {
+      // Silently handle cache invalidation error
     }
   }
 };
@@ -64,10 +62,8 @@ export const invalidateUserListsCache = async (userId: string): Promise<void> =>
   for (const key of firstPageKeys) {
     try {
       await deleteCacheValue(key);
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn(`Failed to invalidate cache key: ${key}`, err);
-      }
+    } catch {
+      // Silently handle cache invalidation error
     }
   }
 };
@@ -79,10 +75,8 @@ export const invalidateUserListsCache = async (userId: string): Promise<void> =>
 export const invalidateAdminCache = async (): Promise<void> => {
   try {
     await deleteCacheValue(CACHE_KEYS.ADMIN_STATS);
-  } catch (err) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Failed to invalidate admin cache', err);
-    }
+  } catch {
+    // Silently handle admin cache invalidation error
   }
 };
 
@@ -100,10 +94,8 @@ export const clearAllCache = async (): Promise<void> => {
   for (const key of criticalKeys) {
     try {
       await deleteCacheValue(key);
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn(`Failed to clear cache key: ${key}`, err);
-      }
+    } catch {
+      // Silently handle cache clear error
     }
   }
 };

@@ -229,8 +229,8 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
       })}`;
 
       void globalMutate(key0, undefined, { revalidate: true });
-    } catch (err) {
-      console.warn('Failed to manual-refresh page-0 key', err);
+    } catch {
+      // Silently handle page-0 refresh error
     }
   }, [mutateRequirements, user?.id, pageSize, searchTerm, filterStatus, dateFromIso, dateToIso, sortBy, sortOrder, minRate, maxRate, remoteFilter]);
 
@@ -491,9 +491,8 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
   useEffect(() => {
     const handleRequirementCreated = (event: any) => {
       const newRequirement = event.detail;
-      console.log('requirement-created event received:', newRequirement);
       if (!newRequirement) {
-        console.warn('Event received but no requirement detail found');
+        // Event received but no requirement detail found
         return;
       }
 
@@ -503,7 +502,6 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
       // Optimistically add the new requirement to the current data immediately
       void mutateRequirements((curr: any) => {
         if (!curr) return curr;
-        console.log('Updating SWR cache with new requirement:', newRequirement);
         // Prepend the new requirement and limit to pageSize, dedup by id
         const existing = curr.requirements || [];
         const deduped = existing.filter((r: any) => r.id !== newRequirement.id);
@@ -516,11 +514,6 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
       // DEBUG: log current cache contents for this key after mutate
       try {
         void mutateRequirements((curr: any) => {
-          try {
-            console.log('Post-mutate current-key requirement ids:', (curr?.requirements || []).map((r: any) => r.id).slice(0, 10));
-          } catch (e) {
-            console.warn('Failed to log current-key cache', e);
-          }
           return curr;
         }, { revalidate: false });
       } catch (e) {

@@ -52,8 +52,8 @@ export function useCachePreferences() {
         }
 
         setIsLoading(false);
-      } catch (error) {
-        console.error('Failed to load cache preferences:', error);
+      } catch {
+        // Silently handle preferences loading error
         setIsLoading(false);
       }
     };
@@ -66,7 +66,6 @@ export function useCachePreferences() {
       const updated = { ...preferences, ...newPrefs, key: 'userPreferences' };
       setPreferences(updated);
       await savePrefs(updated);
-      console.log('[useCachePreferences] Updated preferences:', updated);
       
       // Dispatch event to notify IndexedDB viewers (DevTools) to refresh
       if (typeof window !== 'undefined') {
@@ -83,10 +82,9 @@ export function useCachePreferences() {
       const prefs = await fetchPreferences();
       if (prefs) {
         setPreferences(prefs);
-        console.log('[useCachePreferences] Reloaded preferences:', prefs);
       }
-    } catch (error) {
-      console.error('Failed to reload cache preferences:', error);
+    } catch {
+      // Silently handle preferences reload error
     }
   }, []);
 
@@ -95,8 +93,8 @@ export function useCachePreferences() {
       const persistent = await requestPersistentStorage();
       setIsPersistent(persistent);
       await recordAnalytics('persistent_storage_requested', { granted: persistent });
-    } catch (error) {
-      console.error('Failed to request persistent storage:', error);
+    } catch {
+      // Silently handle persistent storage request error
     }
   }, []);
 

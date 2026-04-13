@@ -413,8 +413,8 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
         type: 'success',
         message: `Found ${jobs.length} job posting(s)`,
       });
-    } catch (error) {
-      console.error('Error scanning Gmail:', error);
+    } catch {
+      // Silently handle Gmail scanning error
       showToast({
         type: 'error',
         message: 'Error scanning Gmail emails',
@@ -559,8 +559,8 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
                   comment_text: formData.next_step.trim(),
                 } as Database['public']['Tables']['next_step_comments']['Insert'],
               ]);
-          } catch (commentError) {
-            console.error('Failed to create initial next step comment:', commentError);
+          } catch {
+            // Silently handle comment creation error
             // Don't fail the whole operation if comment creation fails
           }
         }
@@ -571,7 +571,6 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
           message: 'New requirement has been successfully created',
         });
         // Dispatch event to refresh requirements list
-        console.log('Dispatching requirement-created event with:', createdRequirement);
         window.dispatchEvent(new CustomEvent('requirement-created', { detail: createdRequirement }));
         onSuccess();
       } else {

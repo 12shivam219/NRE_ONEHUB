@@ -831,9 +831,8 @@ export const RequirementDetailModal = ({
             <Box sx={{ maxWidth: '1200px' }}>
               <SimilarRequirementsPanel
                 requirementId={requirement.id}
-                onViewOriginal={(id) => {
+                onViewOriginal={(_id) => {
                   // Could implement navigation to another requirement here
-                  console.log('View original:', id);
                 }}
                 showDuplicates={true}
                 maxResults={8}

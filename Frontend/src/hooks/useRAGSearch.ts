@@ -163,8 +163,7 @@ export function useSkillMatching(requirementId: string | null) {
       }));
 
       setMatches(results.sort((a, b) => b.frequency - a.frequency));
-    } catch (err) {
-      console.error('Skill matching error:', err);
+    } catch {
       setMatches([]);
     } finally {
       setLoading(false);

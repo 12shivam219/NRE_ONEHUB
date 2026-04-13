@@ -486,8 +486,8 @@ export const RequirementsTable = memo(({
               [reqId]: flattenedInterviews,
             }));
           }
-        } catch (err) {
-          console.error('Failed to load interviews:', err);
+        } catch {
+          // Silently handle interview loading error
         } finally {
           setLoadingInterviews(prev => {
             const newSet = new Set(prev);
@@ -516,8 +516,8 @@ export const RequirementsTable = memo(({
           [reqId]: flattenedInterviews,
         }));
       }
-    } catch (err) {
-      console.error('Failed to refresh interviews:', err);
+    } catch {
+      // Silently handle interview refresh error
     } finally {
       setLoadingInterviews(prev => {
         const newSet = new Set(prev);
@@ -535,8 +535,8 @@ export const RequirementsTable = memo(({
         if (result.success && result.consultants) {
           setConsultants(result.consultants);
         }
-      } catch (err) {
-        console.error('Failed to load consultants:', err);
+      } catch {
+        // Silently handle consultant loading error
       }
     };
     loadConsultants();
@@ -610,8 +610,8 @@ export const RequirementsTable = memo(({
           }));
         }
       }
-    } catch (err) {
-      console.error('Failed to delete interview:', err);
+    } catch {
+      // Silently handle interview deletion error
     }
   };
 

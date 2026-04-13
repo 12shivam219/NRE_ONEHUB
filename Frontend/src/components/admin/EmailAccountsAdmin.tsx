@@ -78,8 +78,8 @@ export const EmailAccountsAdmin = () => {
         setGmailConnected(false);
         setGmailEmail(null);
       }
-    } catch (error) {
-      console.error('Error checking Gmail status:', error);
+    } catch {
+      // Silently handle Gmail status check error
       setGmailConnected(false);
       setGmailEmail(null);
     } finally {
@@ -139,8 +139,8 @@ export const EmailAccountsAdmin = () => {
         showToast({ type: 'error', message: 'Blocked unsafe redirect to Google OAuth.' });
         setGmailConnecting(false);
       }
-    } catch (error) {
-      console.error('Error connecting Gmail:', error);
+    } catch {
+      // Silently handle Gmail connection error
       setGmailConnecting(false);
       showToast({
         type: 'error',
@@ -168,8 +168,8 @@ export const EmailAccountsAdmin = () => {
         type: 'success',
         message: 'Gmail disconnected successfully',
       });
-    } catch (error) {
-      console.error('Error disconnecting Gmail:', error);
+    } catch {
+      // Silently handle Gmail disconnection error
       showToast({
         type: 'error',
         message: 'Failed to disconnect Gmail',

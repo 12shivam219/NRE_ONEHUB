@@ -110,7 +110,6 @@ export const OAuthCallbackPage = () => {
         }, 1000);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to process OAuth callback';
-        console.error('OAuth callback error:', err);
         if (!isActive) return;
         setError(message);
         const flowState = searchParams.get('state');

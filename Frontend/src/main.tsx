@@ -95,8 +95,12 @@ if (import.meta.env?.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')
-      .then((reg) => console.log('Service worker registered:', reg))
-      .catch((err) => console.warn('Service worker registration failed:', err));
+      .then(() => {
+        // Service worker registered successfully (silent)
+      })
+      .catch(() => {
+        // Service worker registration failed (silent - not critical)
+      });
   });
 } else if (!import.meta.env?.PROD && 'serviceWorker' in navigator) {
   // Dev convenience: if an older service worker is registered (from a
@@ -109,7 +113,6 @@ if (import.meta.env?.PROD && 'serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.getRegistration('/sw.js');
       if (reg) {
         await reg.unregister();
-        console.info('Dev: unregistered existing /sw.js to avoid stale caching/HMR issues');
         // Best-effort clear of application caches which might still serve
         // cached assets from the old registration.
         if (caches && caches.keys) {
@@ -117,8 +120,8 @@ if (import.meta.env?.PROD && 'serviceWorker' in navigator) {
           await Promise.all(keys.map((k) => caches.delete(k)));
         }
       }
-    } catch (err) {
-      console.debug('Dev: no service worker to unregister or failed to unregister', err);
+    } catch {
+      // Silently fail if no service worker to unregister
     }
   });
 }

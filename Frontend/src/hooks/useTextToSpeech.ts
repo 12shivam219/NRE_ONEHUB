@@ -37,8 +37,6 @@ export const useTextToSpeech = (): UseTextToSpeechReturn => {
     
     if (synth) {
       synthRef.current = synth;
-    } else {
-      console.warn('Web Speech Synthesis API not supported in this browser');
     }
 
     return () => {
@@ -70,17 +68,14 @@ export const useTextToSpeech = (): UseTextToSpeechReturn => {
     utterance.onstart = () => {
       setIsSpeaking(true);
       setIsPaused(false);
-      console.log('Text-to-speech started');
     };
 
     utterance.onend = () => {
       setIsSpeaking(false);
       setIsPaused(false);
-      console.log('Text-to-speech completed');
     };
 
     utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
-      console.error('Text-to-speech error:', event.error);
       setError(`Speech error: ${event.error}`);
       setIsSpeaking(false);
     };
@@ -97,8 +92,7 @@ export const useTextToSpeech = (): UseTextToSpeechReturn => {
 
     try {
       synthRef.current.speak(utterance);
-    } catch (err) {
-      console.error('Error speaking:', err);
+    } catch {
       setError('Failed to start speech');
     }
   }, []);

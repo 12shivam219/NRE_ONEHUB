@@ -70,13 +70,13 @@ const logAuthEvent = async (payload: LogAuthEventPayload): Promise<LogAuthEventR
     });
 
     if (error) {
-      if (import.meta.env.DEV) console.error('Edge function log-auth-event error:', error);
+      // Silently handle edge function error
       return null;
     }
 
     return (data ?? null) as LogAuthEventResponse | null;
-  } catch (error) {
-    if (import.meta.env.DEV) console.error('Edge function log-auth-event exception:', error);
+  } catch {
+    // Silently handle edge function exception
     return null;
   }
 };
@@ -158,7 +158,7 @@ export const register = async (
       .single();
 
     if (profileError) {
-      if (import.meta.env.DEV) console.error('Profile creation error:', profileError);
+      // Silently handle profile creation error
       return { success: false, error: 'Failed to create user profile' };
     }
 
@@ -226,7 +226,7 @@ export const login = async (
     });
 
     if (signInError) {
-      if (import.meta.env.DEV) console.error('Supabase Auth Error:', signInError);
+      // Silently handle sign-in error
       // Log failed login attempt
       await logFailedLogin({ email, clientInfo, reason: signInError.message || 'Invalid credentials' });
       return { success: false, error: signInError.message || 'Invalid credentials' };
@@ -379,7 +379,7 @@ export const getFreshUserData = async (): Promise<User | null> => {
       .single();
 
     if (error || !userData) {
-      if (import.meta.env.DEV) console.error('Error fetching fresh user data:', error);
+      // Silently handle fetch error
       return null;
     }
 
@@ -396,8 +396,8 @@ export const getFreshUserData = async (): Promise<User | null> => {
 
     sessionStorage.setItem('user', JSON.stringify(user));
     return user;
-  } catch (error) {
-    if (import.meta.env.DEV) console.error('Exception fetching fresh user data:', error);
+  } catch {
+    // Silently handle fetch exception
     return null;
   }
 };

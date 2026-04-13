@@ -63,8 +63,8 @@ export const JobExtractionAgentDashboard = () => {
 
       if (error) throw error;
       setLogs(data || []);
-    } catch (error) {
-      console.error('Error loading logs:', error);
+    } catch {
+      // Silently handle log loading error
       showToast({
         type: 'error',
         message: 'Failed to load agent logs',
@@ -85,8 +85,8 @@ export const JobExtractionAgentDashboard = () => {
 
       if (error) throw error;
       setProcessedEmails(data || []);
-    } catch (error) {
-      console.error('Error loading processed emails:', error);
+    } catch {
+      // Silently handle email loading error
       showToast({
         type: 'error',
         message: 'Failed to load processed emails',
@@ -128,7 +128,7 @@ export const JobExtractionAgentDashboard = () => {
         loadProcessedEmails();
       }, 2000);
     } catch (error) {
-      console.error('Error running agent:', error);
+      // Silently handle agent execution error
       showToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to run agent',

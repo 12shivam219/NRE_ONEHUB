@@ -40,8 +40,8 @@ export default function DraftEncryptionPanel() {
       setEnabled(true);
       setUnlocked(true);
       showToast({ type: 'success', title: 'Encryption enabled', message: 'Draft encryption enabled and unlocked.' });
-    } catch (err) {
-      console.error(err);
+    } catch {
+      // Silently handle encryption enable error
       showToast({ type: 'error', title: 'Enable failed', message: 'Could not enable encryption.' });
     }
   };
@@ -78,8 +78,8 @@ export default function DraftEncryptionPanel() {
       showToast({ type: 'success', title: 'Migration complete', message: `Encrypted ${result.migrated} drafts.` });
       const all = await getAllDrafts();
       setDraftCount(all.length);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      // Silently handle draft encryption error
       showToast({ type: 'error', title: 'Migration failed', message: 'Could not migrate drafts.' });
     } finally {
       setMigrating(false);

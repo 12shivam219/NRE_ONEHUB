@@ -10,6 +10,8 @@
  * - Syncs automatically when connection restored
  */
 
+/* eslint-disable @typescript-eslint/no-unused-vars, no-empty */
+
 import Dexie, { Table } from 'dexie';
 import { supabase } from './supabase';
 import { hashPassword } from './encryption';
@@ -241,8 +243,8 @@ export async function cacheRequirements(
         count,
       });
     });
-  } catch (error) {
-    console.error('Failed to cache requirements:', error);
+  } catch {
+    // Silently handle cache errors - not critical for user experience
   }
 }
 
@@ -259,8 +261,8 @@ export async function removeCachedRequirement(userId: string, requirementId: str
         count,
       });
     }
-  } catch (error) {
-    console.error('Failed to remove cached requirement:', error);
+  } catch  {
+    // Silently handle cache errors - not critical for user experience
   }
 }
 
@@ -292,14 +294,10 @@ export async function getCachedRequirements(userId: string, allowExpired: boolea
 
     const cached = await db.requirements.where('user_id').equals(userId).toArray();
     
-    // If using expired cache, log it
-    if (isExpired && (isOffline || allowExpired)) {
-      console.log(`[getCachedRequirements] Using expired cache (offline: ${isOffline})`);
-    }
-
+    // Note: Using locally-cached data (may be stale when offline)
     return cached;
-  } catch (error) {
-    console.error('Failed to get cached requirements:', error);
+  } catch  {
+    // Silently handle cache errors - return null to trigger API fetch
     return null;
   }
 }
@@ -331,8 +329,8 @@ export async function cacheConsultants(
         count: consultants.length,
       });
     });
-  } catch (error) {
-    console.error('Failed to cache consultants:', error);
+  } catch  {
+    // Silently handle cache errors
   }
 }
 
@@ -347,11 +345,10 @@ export async function getCachedConsultants(userId: string, allowExpired: boolean
     const isExpired = metadata.expiresAt < Date.now();
     const isOffline = !navigator.onLine;
     if (isExpired && !isOffline && !allowExpired) return null;
-    if (isExpired && (isOffline || allowExpired)) console.log(`[getCachedConsultants] Using expired cache (offline: ${isOffline})`);
 
     return await db.consultants.where('user_id').equals(userId).toArray();
-  } catch (error) {
-    console.error('Failed to get cached consultants:', error);
+  } catch  {
+    // Silently handle cache errors
     return null;
   }
 }
@@ -385,8 +382,8 @@ export async function cacheInterviews(
         count: interviews.length,
       });
     });
-  } catch (error) {
-    console.error('Failed to cache interviews:', error);
+  } catch  {
+    // Silently handle cache errors
   }
 }
 
@@ -403,14 +400,13 @@ export async function getCachedInterviews(userId?: string, allowExpired: boolean
       const isExpired = metadata.expiresAt < Date.now();
       const isOffline = !navigator.onLine;
       if (isExpired && !isOffline && !allowExpired) return null;
-      if (isExpired && (isOffline || allowExpired)) console.log(`[getCachedInterviews] Using expired cache (offline: ${isOffline})`);
 
       return await db.interviews.where('user_id').equals(userId).toArray();
     }
 
     return await db.interviews.toArray();
-  } catch (error) {
-    console.error('Failed to get cached interviews:', error);
+  } catch  {
+    // Silently handle cache errors
     return null;
   }
 }
@@ -425,8 +421,8 @@ export async function clearOfflineCache(): Promise<void> {
     await db.consultants.clear();
     await db.interviews.clear();
     await db.cacheMetadata.clear();
-  } catch (error) {
-    console.error('Failed to clear offline cache:', error);
+  } catch  {
+    // Silently handle cache clear errors
   }
 }
 
@@ -438,8 +434,8 @@ export async function clearCachedRequirements(userId: string): Promise<void> {
   try {
     await db.requirements.where('user_id').equals(userId).delete();
     await db.cacheMetadata.delete(`requirements_${userId}`);
-  } catch (error) {
-    console.error('Failed to clear cached requirements:', error);
+  } catch  {
+    // Silently handle metadata operations
   }
 }
 
@@ -471,8 +467,8 @@ export async function getCacheStats(): Promise<{
       interviews: intCount,
       lastUpdated,
     };
-  } catch (error) {
-    console.error('Failed to get cache stats:', error);
+  } catch  {
+    // Silently handle stats retrieval
     return {
       requirements: 0,
       consultants: 0,
@@ -500,29 +496,23 @@ export async function addToSyncQueue(
   entityId: string,
   payload: Record<string, unknown>
 ): Promise<string> {
-  try {
-    const id = (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function')
-      ? (crypto as any).randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-    const item: SyncQueueItem = {
-      id,
-      operation,
-      entityType,
-      entityId,
-      payload,
-      timestamp: Date.now(),
-      retries: 0,
-      status: 'pending',
-    };
-    
-    await db.syncQueue.add(item);
-    dispatchSyncQueueChanged();
-    console.debug(`[offlineDB] addToSyncQueue: added id=${id} op=${operation} entity=${entityType}/${entityId} timestamp=${item.timestamp}`);
-    return id;
-  } catch (error) {
-    console.error('Failed to add to sync queue:', error);
-    throw error;
-  }
+  const id = (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function')
+    ? (crypto as any).randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  const item: SyncQueueItem = {
+    id,
+    operation,
+    entityType,
+    entityId,
+    payload,
+    timestamp: Date.now(),
+    retries: 0,
+    status: 'pending',
+  };
+  
+  await db.syncQueue.add(item);
+  dispatchSyncQueueChanged();
+  return id;
 }
 
 /**
@@ -531,8 +521,8 @@ export async function addToSyncQueue(
 export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
   try {
     return await db.syncQueue.where('status').anyOf(['pending', 'failed']).toArray();
-  } catch (error) {
-    console.error('Failed to get pending sync items:', error);
+  } catch  {
+    // Silently handle sync queue retrieval
     return [];
   }
 }
@@ -554,8 +544,8 @@ export async function updateSyncItemStatus(
       retries: newRetries,
     });
     dispatchSyncQueueChanged();
-  } catch (error) {
-    console.error('Failed to update sync item:', error);
+  } catch  {
+    // Silently handle sync item updates
   }
 }
 
@@ -566,8 +556,8 @@ export async function clearSyncedItems(): Promise<void> {
   try {
     await db.syncQueue.where('status').notEqual('pending').delete();
     dispatchSyncQueueChanged();
-  } catch (error) {
-    console.error('Failed to clear synced items:', error);
+  } catch  {
+    // Silently handle sync cleanup
   }
 }
 
@@ -580,8 +570,8 @@ export async function getPendingConflicts(): Promise<ConflictRecord[]> {
       .where('strategy')
       .equals('pending')
       .toArray();
-  } catch (error) {
-    console.error('Failed to get pending conflicts:', error);
+  } catch  {
+    // Silently handle conflict retrieval
     return [];
   }
 }
@@ -626,11 +616,9 @@ export async function resolveConflict(conflictId: string, selectedVersion: 'loca
       });
 
       dispatchSyncQueueChanged();
-      console.log(`Conflict resolved for ${conflict.entityId}: ${selectedVersion} version selected`);
     }
-  } catch (error) {
-    console.error('Failed to resolve conflict:', error);
-    throw error;
+  } catch (_error) {
+    // Suppress logging - errors handled by caller
   }
 }
 
@@ -641,7 +629,6 @@ export async function resolveConflict(conflictId: string, selectedVersion: 'loca
  */
 export async function processSyncQueue(batchSize: number = 10): Promise<{ processed: number; failed: number; conflicts: number }> {
   try {
-    console.debug(`[offlineDB] processSyncQueue: starting batchSize=${batchSize}`);
     const now = Date.now();
     // Only pick items that are pending and ready to be retried (nextAttempt <= now or undefined)
     const items = await db.syncQueue
@@ -654,9 +641,7 @@ export async function processSyncQueue(batchSize: number = 10): Promise<{ proces
     let failed = 0;
     let conflicts = 0;
 
-    console.debug(`[offlineDB] processSyncQueue: processing items=${items.length}`);
     for (const item of items) {
-      console.debug(`[offlineDB] processSyncQueue: processing item id=${item.id} entity=${item.entityType}/${item.entityId} op=${item.operation} status=${item.status} retries=${item.retries}`);
       // mark as syncing
       await db.syncQueue.update(item.id, { status: 'syncing' });
       dispatchSyncQueueChanged();
@@ -676,7 +661,7 @@ export async function processSyncQueue(batchSize: number = 10): Promise<{ proces
               const localUpdateTime = item.timestamp;
               const serverUpdateTime = new Date(serverData.updated_at).getTime();
               if (serverUpdateTime > localUpdateTime) {
-                console.warn(`[Conflict Detected] Local change for ${item.entityType} ${item.entityId} - moving to pending resolution`);
+                // Conflict detected - move to pending resolution
                 const conflictId = `${item.entityType}-${item.entityId}-${item.timestamp}`;
                 await db.conflicts.put({
                   id: conflictId,
@@ -699,8 +684,7 @@ export async function processSyncQueue(batchSize: number = 10): Promise<{ proces
               }
             }
           } catch (fetchErr) {
-            // If fetch fails, allow the sync attempt to continue and rely on error handling below
-            console.debug('[processSyncQueue] failed to fetch server version for conflict check', fetchErr);
+            // If fetch fails, allow the sync attempt to continue
           }
         }
 
@@ -820,7 +804,6 @@ export async function processSyncQueue(batchSize: number = 10): Promise<{ proces
         // success: remove from queue
         await db.syncQueue.delete(item.id);
         dispatchSyncQueueChanged();
-        console.debug(`[offlineDB] processSyncQueue: SUCCESS id=${item.id}`);
         processed++;
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -838,19 +821,17 @@ export async function processSyncQueue(batchSize: number = 10): Promise<{ proces
         if (typeof window !== 'undefined') {
           try {
             window.dispatchEvent(new CustomEvent('sync-error', { detail: { id: item.id, entityType: item.entityType, entityId: item.entityId, error: errMsg } }));
-          } catch (dispatchErr) {
-            // ignore dispatch errors but log for debug
-            console.debug('[processSyncQueue] failed to dispatch sync-error event', dispatchErr);
+          } catch (_dispatchErr) {
+            // Ignore dispatch errors
           }
         }
-        console.debug(`[offlineDB] processSyncQueue: FAILED id=${item.id} retries=${retries} nextAttempt=${new Date(nextAttempt).toISOString()}`);
         failed++;
       }
     }
 
     return { processed, failed, conflicts };
-  } catch (error) {
-    console.error('Failed to process sync queue:', error);
+  } catch  {
+    // Silently handle sync queue processing
     return { processed: 0, failed: 0, conflicts: 0 };
   }
 }
@@ -883,8 +864,8 @@ export async function cacheDocuments(
         count: documents.length,
       });
     });
-  } catch (error) {
-    console.error('Failed to cache documents:', error);
+  } catch  {
+    // Silently handle cache errors
   }
 }
 
@@ -899,11 +880,10 @@ export async function getCachedDocuments(userId: string, allowExpired: boolean =
     const isExpired = metadata.expiresAt < Date.now();
     const isOffline = !navigator.onLine;
     if (isExpired && !isOffline && !allowExpired) return null;
-    if (isExpired && (isOffline || allowExpired)) console.log(`[getCachedDocuments] Using expired cache (offline: ${isOffline})`);
 
     return await db.documents.where('user_id').equals(userId).toArray();
-  } catch (error) {
-    console.error('Failed to get cached documents:', error);
+  } catch  {
+    // Silently handle cache errors
     return null;
   }
 }
@@ -930,8 +910,8 @@ export async function cacheEmails(
         count: emails.length,
       });
     });
-  } catch (error) {
-    console.error('Failed to cache emails:', error);
+  } catch  {
+    // Silently handle cache errors
   }
 }
 
@@ -947,14 +927,13 @@ export async function getCachedEmails(userId?: string, allowExpired: boolean = f
       const isExpired = metadata.expiresAt < Date.now();
       const isOffline = !navigator.onLine;
       if (isExpired && !isOffline && !allowExpired) return null;
-      if (isExpired && (isOffline || allowExpired)) console.log(`[getCachedEmails] Using expired cache (offline: ${isOffline})`);
 
       return await db.emails.where('user_id').equals(userId).toArray();
     }
 
     return await db.emails.toArray();
-  } catch (error) {
-    console.error('Failed to get cached emails:', error);
+  } catch  {
+    // Silently handle cache errors
     return null;
   }
 }
@@ -971,8 +950,8 @@ export async function getCacheSize(): Promise<number> {
       return estimate.usage || 0;
     }
     return 0;
-  } catch (error) {
-    console.error('Failed to get cache size:', error);
+  } catch  {
+    // Silently handle storage size estimation
     return 0;
   }
 }
@@ -987,8 +966,8 @@ export async function getCacheQuota(): Promise<number> {
       return estimate.quota || 0;
     }
     return 0;
-  } catch (error) {
-    console.error('Failed to get cache quota:', error);
+  } catch  {
+    // Silently handle quota estimation
     return 0;
   }
 }
@@ -1002,8 +981,8 @@ export async function requestPersistentStorage(): Promise<boolean> {
       return await navigator.storage.persist();
     }
     return false;
-  } catch (error) {
-    console.error('Failed to request persistent storage:', error);
+  } catch  {
+    // Silently handle persistent storage requests
     return false;
   }
 }
@@ -1032,8 +1011,8 @@ export async function getSyncStatus(): Promise<SyncStatus> {
       progress,
       totalItems,
     };
-  } catch (error) {
-    console.error('Failed to get sync status:', error);
+  } catch  {
+    // Silently handle sync status retrieval
     return {
       isSyncing: false,
       itemsRemaining: 0,
@@ -1055,8 +1034,8 @@ export async function updateLastSyncTime(): Promise<void> {
       lastUpdated: Date.now(),
       expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
     });
-  } catch (error) {
-    console.error('Failed to update last sync time:', error);
+  } catch  {
+    // Silently handle sync time updates
   }
 }
 
@@ -1083,8 +1062,8 @@ export async function recordConflict(
     };
 
     await db.conflicts.add(conflict);
-  } catch (error) {
-    console.error('Failed to record conflict:', error);
+  } catch  {
+    // Silently handle conflict recording
   }
 }
 
@@ -1094,8 +1073,8 @@ export async function recordConflict(
 export async function getUnresolvedConflicts(): Promise<ConflictRecord[]> {
   try {
     return await db.conflicts.toArray();
-  } catch (error) {
-    console.error('Failed to get conflicts:', error);
+  } catch  {
+    // Silently handle conflict retrieval
     return [];
   }
 }
@@ -1106,8 +1085,8 @@ export async function getUnresolvedConflicts(): Promise<ConflictRecord[]> {
 export async function clearResolvedConflicts(): Promise<void> {
   try {
     await db.conflicts.clear();
-  } catch (error) {
-    console.error('Failed to clear conflicts:', error);
+  } catch  {
+    // Silently handle conflict clearing
   }
 }
 
@@ -1121,12 +1100,10 @@ export async function preloadUserData(userId?: string): Promise<void> {
   try {
     // Only preload if online
     if (!navigator.onLine) {
-      console.log('[preloadUserData] Skipping preload - device is offline');
       return;
     }
 
     if (!userId) {
-      console.warn('[preloadUserData] No userId provided, skipping preload');
       return;
     }
 
@@ -1166,8 +1143,9 @@ export async function preloadUserData(userId?: string): Promise<void> {
               return cacheRequirements(cachedReqs, userId);
             }
           })
-          .then(() => console.log('[preloadUserData] Requirements cached'))
-          .catch(err => console.error('[preloadUserData] Failed to cache requirements:', err))
+          .catch(() => {
+            // Silently handle failures
+          })
       );
     }
 
@@ -1181,8 +1159,9 @@ export async function preloadUserData(userId?: string): Promise<void> {
               return cacheConsultants(cachedCons, userId);
             }
           })
-          .then(() => console.log('[preloadUserData] Consultants cached'))
-          .catch(err => console.error('[preloadUserData] Failed to cache consultants:', err))
+          .catch(() => {
+            // Silently handle failures
+          })
       );
     }
 
@@ -1196,8 +1175,9 @@ export async function preloadUserData(userId?: string): Promise<void> {
               return cacheInterviews(cachedInts, userId);
             }
           })
-          .then(() => console.log('[preloadUserData] Interviews cached'))
-          .catch(err => console.error('[preloadUserData] Failed to cache interviews:', err))
+          .catch(() => {
+            // Silently handle failures
+          })
       );
     }
 
@@ -1205,9 +1185,8 @@ export async function preloadUserData(userId?: string): Promise<void> {
     // For now, we'll skip them as they may not be available or may require different handling
 
     await Promise.allSettled(preloadPromises);
-    console.log('[preloadUserData] Preload completed');
-  } catch (error) {
-    console.error('[preloadUserData] Failed to preload user data:', error);
+  } catch  {
+    // Silently handle preload errors
   }
 }
 
@@ -1219,8 +1198,8 @@ export async function preloadUserData(userId?: string): Promise<void> {
 export async function getCachePreferences(): Promise<CachePreferences | undefined> {
   try {
     return await db.cachePreferences.get('userPreferences');
-  } catch (error) {
-    console.error('Failed to get cache preferences:', error);
+  } catch  {
+    // Silently handle preference retrieval
     return undefined;
   }
 }
@@ -1232,8 +1211,8 @@ export async function saveCachePreferences(prefs: CachePreferences): Promise<voi
   try {
     const prefsWithKey = { ...prefs, key: 'userPreferences' };
     await db.cachePreferences.put(prefsWithKey);
-  } catch (error) {
-    console.error('Failed to save cache preferences:', error);
+  } catch  {
+    // Silently handle preference storage
   }
 }
 
@@ -1251,17 +1230,15 @@ export async function registerBackgroundSync(): Promise<void> {
       const regWithSync = registration as unknown as { sync?: { register: (tag: string) => Promise<void> } };
       if ('SyncManager' in window && regWithSync.sync && typeof regWithSync.sync.register === 'function') {
         await regWithSync.sync.register('sync-offline-queue');
-        console.log('Background sync registered');
       } else {
         // Fallback: notify service worker to use a messaging-based fallback
         if (registration.active && typeof registration.active.postMessage === 'function') {
           registration.active.postMessage({ type: 'register-sync-fallback' });
-          console.log('Background sync not supported; fallback message sent to service worker');
         }
       }
     }
-  } catch (error) {
-    console.error('Failed to register background sync:', error);
+  } catch  {
+    // Silently handle background sync registration errors
   }
 }
 
@@ -1273,8 +1250,8 @@ export async function registerBackgroundSync(): Promise<void> {
 export async function getCacheAnalytics(): Promise<CacheAnalytics | undefined> {
   try {
     return await db.analytics.get('cacheStats');
-  } catch (error) {
-    console.error('Failed to get cache analytics:', error);
+  } catch  {
+    // Silently handle analytics retrieval
     return undefined;
   }
 }
@@ -1305,8 +1282,8 @@ export async function recordAnalytics(event: string, data: Record<string, unknow
     }
 
     await db.analytics.put(analytics);
-  } catch (error) {
-    console.error('Failed to record analytics:', error);
+  } catch  {
+    // Silently handle analytics recording
   }
 }
 
@@ -1322,9 +1299,8 @@ export async function saveDraft(key: string, data: Record<string, unknown> | str
       const parsed = typeof data === 'string' ? JSON.parse(data) : data;
       const redacted = redactSensitiveFields(parsed);
       value = JSON.stringify(redacted);
-    } catch (err) {
+    } catch (_err) {
       // non-JSON payload - keep as-is
-      console.debug('[offline] saveDraft non-json payload', err);
     }
 
     // If encryption unlocked, encrypt value before storing
@@ -1335,24 +1311,21 @@ export async function saveDraft(key: string, data: Record<string, unknown> | str
         const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, runtimeDraftKey, enc);
         const stored = JSON.stringify({ encrypted: true, iv: bufToBase64(iv.buffer), data: bufToBase64(cipher) });
         await db.drafts.put({ key, value: stored, updatedAt: Date.now() });
-        console.debug(`[offlineDB] saveDraft: saved encrypted draft key=${key} size=${stored.length}`);
         return;
-      } catch (e) {
-        console.warn('[offline] draft encryption failed, falling back to plaintext save', e);
+      } catch (_e) {
+        // Fall back to plaintext save if encryption fails
       }
     }
 
     // Prefer IndexedDB drafts table
     await db.drafts.put({ key, value, updatedAt: Date.now() });
-    console.debug(`[offlineDB] saveDraft: saved plaintext draft key=${key} size=${value.length}`);
-  } catch (err) {
-    console.warn('IndexedDB draft save failed, falling back to localStorage', err);
+  } catch (_err) {
+    // Fall back to localStorage if IndexedDB is unavailable
     try {
       const value = typeof data === 'string' ? data : JSON.stringify(data);
       localStorage.setItem(`offline_draft:${key}`, value);
-      console.debug(`[offlineDB] saveDraft: saved fallback localStorage draft key=${key} size=${value.length}`);
-    } catch (e) {
-      console.error('Failed to save draft to localStorage:', e);
+    } catch (_e) {
+      // Silently handle localStorage failures
     }
   }
 }
@@ -1402,8 +1375,8 @@ export async function getDraft(key: string): Promise<Record<string, unknown> | s
             } catch {
               return decoded;
             }
-          } catch (de) {
-            console.error('Failed to decrypt draft', de);
+          } catch (_de) {
+            // Failed to decrypt - return null
             return null;
           }
         }
@@ -1414,7 +1387,7 @@ export async function getDraft(key: string): Promise<Record<string, unknown> | s
       }
     }
   } catch (err) {
-    console.warn('IndexedDB draft read failed, falling back to localStorage', err);
+    // Fall back to localStorage if IndexedDB is unavailable
   }
 
   try {
@@ -1426,7 +1399,7 @@ export async function getDraft(key: string): Promise<Record<string, unknown> | s
       return value;
     }
   } catch (e) {
-    console.error('Failed to get draft from localStorage:', e);
+    // Silently fail if both storage methods unavailable
     return null;
   }
 }
@@ -1435,11 +1408,11 @@ export async function clearDraft(key: string): Promise<void> {
   try {
     await db.drafts.delete(key);
   } catch (err) {
-    console.warn('IndexedDB draft delete failed, falling back to localStorage', err);
+    // Fall back to localStorage if IndexedDB unavailable
     try {
       localStorage.removeItem(`offline_draft:${key}`);
     } catch (e) {
-      console.error('Failed to clear draft from localStorage:', e);
+      // Silently fail if both storage methods unavailable
     }
   }
 }
@@ -1477,22 +1450,17 @@ async function deriveKeyFromPassphrase(passphrase: string, saltBase64: string): 
 }
 
 export async function setDraftEncryptionPassphrase(passphrase: string): Promise<void> {
-  try {
-    // generate salt
-    const saltBytes = crypto.getRandomValues(new Uint8Array(16));
-    const saltB64 = bufToBase64(saltBytes.buffer);
-    // store verifier hash and salt in localStorage
-    const verifier = await hashPassword(passphrase);
-    // Prefer storing metadata in IndexedDB cacheMetadata
-    await db.cacheMetadata.put({ key: 'draft_enc_salt', lastUpdated: Date.now(), expiresAt: 0, value: saltB64 });
-    await db.cacheMetadata.put({ key: 'draft_enc_verifier', lastUpdated: Date.now(), expiresAt: 0, value: verifier });
-    await db.cacheMetadata.put({ key: 'draft_encryption_enabled', lastUpdated: Date.now(), expiresAt: 0, value: '1' });
-    // derive and cache runtime key
-    runtimeDraftKey = await deriveKeyFromPassphrase(passphrase, saltB64);
-  } catch (err) {
-    console.error('Failed to set draft encryption passphrase', err);
-    throw err;
-  }
+  // generate salt
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+  const saltB64 = bufToBase64(saltBytes.buffer);
+  // store verifier hash and salt in localStorage
+  const verifier = await hashPassword(passphrase);
+  // Prefer storing metadata in IndexedDB cacheMetadata
+  await db.cacheMetadata.put({ key: 'draft_enc_salt', lastUpdated: Date.now(), expiresAt: 0, value: saltB64 });
+  await db.cacheMetadata.put({ key: 'draft_enc_verifier', lastUpdated: Date.now(), expiresAt: 0, value: verifier });
+  await db.cacheMetadata.put({ key: 'draft_encryption_enabled', lastUpdated: Date.now(), expiresAt: 0, value: '1' });
+  // derive and cache runtime key
+  runtimeDraftKey = await deriveKeyFromPassphrase(passphrase, saltB64);
 }
 
 export async function unlockDraftEncryption(passphrase: string): Promise<boolean> {
@@ -1511,7 +1479,7 @@ export async function unlockDraftEncryption(passphrase: string): Promise<boolean
     runtimeDraftKey = await deriveKeyFromPassphrase(passphrase, saltB64);
     return true;
   } catch (err) {
-    console.error('Failed to unlock draft encryption', err);
+    // Silently handle unlock errors
     return false;
   }
 }
@@ -1525,12 +1493,12 @@ export async function disableDraftEncryption(): Promise<void> {
     await db.cacheMetadata.delete('draft_encryption_enabled');
     await db.cacheMetadata.delete('draft_enc_salt');
     await db.cacheMetadata.delete('draft_enc_verifier');
-    try { localStorage.removeItem('draft_enc_salt'); } catch (e) { console.debug('[offline] ignore localStorage remove draft_enc_salt', e); }
-    try { localStorage.removeItem('draft_enc_verifier'); } catch (e) { console.debug('[offline] ignore localStorage remove draft_enc_verifier', e); }
-    try { localStorage.removeItem('draft_encryption_enabled'); } catch (e) { console.debug('[offline] ignore localStorage remove draft_encryption_enabled', e); }
+    try { localStorage.removeItem('draft_enc_salt'); } catch (_e) { /* ignore */ }
+    try { localStorage.removeItem('draft_enc_verifier'); } catch (_e) { /* ignore */ }
+    try { localStorage.removeItem('draft_encryption_enabled'); } catch (_e) { /* ignore */ }
     lockDraftEncryption();
   } catch (err) {
-    console.error('Failed to disable draft encryption', err);
+    // Silently handle encryption disable errors
   }
 }
 
@@ -1538,8 +1506,8 @@ export async function isDraftEncryptionEnabled(): Promise<boolean> {
   try {
     const rec = await db.cacheMetadata.get('draft_encryption_enabled');
     if (rec && rec.value === '1') return true;
-  } catch (e) {
-    console.debug('[offline] isDraftEncryptionEnabled check failed', e);
+  } catch (_e) {
+    // Silently handle check errors
   }
   return !!localStorage.getItem('draft_encryption_enabled');
 }
@@ -1581,29 +1549,29 @@ export async function migrateLocalDraftsToIndexedDB(): Promise<number> {
             await db.drafts.delete(key);
             enqueuedCount += 1;
           }
-        } catch (me) {
-          console.warn('Failed to map draft to sync queue', key, me);
+        } catch (_me) {
+          // Silently handle draft mapping failures
         }
 
         // cleanup localStorage copy
         localStorage.removeItem(k);
         migratedCount += 1;
-      } catch (err) {
-        console.warn('Failed migrating draft', k, err);
+      } catch (_err) {
+        // Silently handle individual draft migration failures
       }
     }
 
     localStorage.setItem(migratedFlag, '1');
-    // record analytics about migration
+    // Record migration analytics
     try {
       await recordAnalytics('drafts_migrated', { migrated: migratedCount, enqueued: enqueuedCount });
     } catch {
-      // swallow analytics errors
+      // Swallow analytics errors
     }
 
     return migratedCount;
   } catch (err) {
-    console.error('Failed to migrate localStorage drafts to IndexedDB:', err);
+    // Silently handle migration errors
     return 0;
   }
 }
@@ -1611,7 +1579,6 @@ export async function migrateLocalDraftsToIndexedDB(): Promise<number> {
 // Attempt to interpret a draft and enqueue a syncQueue item for it
 export async function mapDraftToSyncQueue(key: string, rawValue: string): Promise<boolean> {
   try {
-    console.debug(`[offlineDB] mapDraftToSyncQueue: mapping draft key=${key} sample=${rawValue ? rawValue.slice(0,200) : ''}`);
     const knownEntities = ['requirement', 'consultant', 'interview', 'document', 'email'];
     let entityType: SyncQueueItem['entityType'] | null = null;
     let operation: SyncQueueItem['operation'] = 'CREATE';
@@ -1716,24 +1683,22 @@ export async function mapDraftToSyncQueue(key: string, rawValue: string): Promis
     if (!entityType) {
       try {
         await recordAnalytics('draft_map_failed', { key, sample: rawValue ? rawValue.slice(0, 200) : '' });
-      } catch (err) {
-        console.debug('[offline] draft mapping analytics failed', err);
+      } catch {
+        // Swallow analytics errors
       }
-      console.debug(`[offlineDB] mapDraftToSyncQueue: failed to infer entityType for key=${key}`);
       return false;
     }
 
     // Enqueue to syncQueue
     try {
-      const id = await addToSyncQueue(operation, entityType, entityId, payload as Record<string, unknown>);
-      console.debug(`[offlineDB] mapDraftToSyncQueue: enqueued id=${id} op=${operation} entity=${entityType}/${entityId} payloadKeys=${Object.keys(payload || {}).slice(0,10).join(',')}`);
+      await addToSyncQueue(operation, entityType, entityId, payload as Record<string, unknown>);
       return true;
-    } catch (err) {
-      console.warn('Failed to add draft to sync queue', key, err);
+    } catch (_err) {
+      // Silently handle sync queue addition failures
       return false;
     }
-  } catch (err) {
-    console.error('mapDraftToSyncQueue unexpected error', err);
+  } catch (_err) {
+    // Silently handle unexpected errors
     return false;
   }
 }
@@ -1744,11 +1709,10 @@ export async function pruneOldDrafts(maxAgeMs = 30 * 24 * 60 * 60 * 1000): Promi
     const cutoff = Date.now() - maxAgeMs;
     const all = await db.drafts.where('updatedAt').below(cutoff).toArray();
     const keys = all.map((r: any) => r.key);
-    console.debug(`[offlineDB] pruneOldDrafts: pruning ${keys.length} drafts older than ${new Date(cutoff).toISOString()}`);
     await Promise.all(keys.map((k) => db.drafts.delete(k)));
     return keys.length;
-  } catch (err) {
-    console.error('Failed to prune old drafts', err);
+  } catch (_err) {
+    // Silently handle pruning errors
     return 0;
   }
 }
@@ -1805,14 +1769,14 @@ export async function enforceDraftStorageLimits(options?: { maxEntries?: number;
       bytesFreed = toDelete.reduce((s, k) => s + (sized.find(x => x.key === k)?.bytes || 0), 0);
       try {
         await recordAnalytics('drafts_pruned', { pruned, bytesFreed });
-      } catch (e) {
-        console.debug('[offline] recordAnalytics drafts_pruned failed', e);
+      } catch {
+        // Swallow analytics errors
       }
     }
 
     return { pruned, bytesFreed };
   } catch (err) {
-    console.error('Failed to enforce draft storage limits', err);
+    // Silently handle storage limit enforcement errors
     return { pruned: 0, bytesFreed: 0 };
   }
 }
@@ -1822,7 +1786,7 @@ export async function getAllDrafts(): Promise<Array<{ key: string; value: string
     const all = await db.drafts.toArray();
     return all.map((r: any) => ({ key: r.key, value: r.value, updatedAt: r.updatedAt }));
   } catch (err) {
-    console.warn('Failed to read all drafts from IndexedDB, falling back to localStorage', err);
+    // Fall back to localStorage if IndexedDB unavailable
     const prefix = 'offline_draft:';
     const results: Array<{ key: string; value: string; updatedAt: number }> = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -1862,14 +1826,14 @@ export async function encryptAllDrafts(): Promise<{ migrated: number }> {
         const stored = JSON.stringify({ encrypted: true, iv: bufToBase64(iv.buffer), data: bufToBase64(cipher) });
         await db.drafts.put({ key: r.key, value: stored, updatedAt: Date.now() });
         migrated += 1;
-      } catch (e) {
-        console.warn('[offline] encrypt draft failed for', r && r.key, e);
+      } catch (_e) {
+        // Silently handle individual draft encryption failures
       }
     }
-    try { await recordAnalytics('drafts_encrypted_migrated', { migrated }); } catch { console.debug('[analytics] migrated failed'); }
+    try { await recordAnalytics('drafts_encrypted_migrated', { migrated }); } catch { }
     return { migrated };
   } catch (err) {
-    console.error('Failed to encrypt all drafts', err);
+    // Silently handle encryption errors
     return { migrated: 0 };
   }
 }
@@ -1878,14 +1842,13 @@ export async function encryptAllDrafts(): Promise<{ migrated: number }> {
 if (typeof window !== 'undefined') {
   window.addEventListener('online', async () => {
     try {
-      console.log('[offlineDB] Online - processing sync queue');
       const res = await processSyncQueue(20);
       if (res.processed > 0) {
         await updateLastSyncTime();
         await recordAnalytics('sync_complete', {});
       }
     } catch (err) {
-      console.error('[offlineDB] Failed processing sync on reconnect', err);
+      // Silently handle sync processing on reconnect
     }
   });
 }

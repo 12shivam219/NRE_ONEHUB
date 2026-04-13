@@ -283,7 +283,6 @@ export const JDParserDialog = ({
             ...payload,
           } as RequirementRow);
 
-          console.log('Dispatching requirement-created event with:', createdRequirement);
           window.dispatchEvent(
             new CustomEvent('requirement-created', {
               detail: createdRequirement,

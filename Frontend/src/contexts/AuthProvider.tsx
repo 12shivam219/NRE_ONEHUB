@@ -36,7 +36,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         // we must clear any stale cached state so we don't loop on failing refresh attempts.
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) {
-          if (import.meta.env.DEV) console.error('Error reading Supabase session:', sessionError);
+          // Silently handle session error
 
           if (/invalid refresh token/i.test(sessionError.message)) {
             try {
@@ -113,12 +113,12 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Set Sentry user context for error tracking
         setSentryUser(minimalUser.id, minimalUser.email, minimalUser.full_name);
         setIsLoading(false);
-      } catch (validationError) {
-        if (import.meta.env.DEV) console.error('Error validating session:', validationError);
+      } catch {
+        // Silently handle validation error
         setIsLoading(false);
       }
-    } catch (error) {
-      if (import.meta.env.DEV) console.error('Error loading authenticated user:', error);
+    } catch {
+      // Silently handle user loading error
       setUser(null);
       clearSentryUser();
       sessionStorage.removeItem('user');

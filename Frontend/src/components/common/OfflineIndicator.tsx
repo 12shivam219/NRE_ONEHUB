@@ -35,12 +35,10 @@ export const OfflineIndicator = () => {
     };
 
     const handleOnline = () => {
-      console.log('[OfflineIndicator] Online event triggered');
       setIsOnline(true);
       void updateSyncStatus();
     };
     const handleOffline = () => {
-      console.log('[OfflineIndicator] Offline event triggered');
       setIsOnline(false);
       
       // Show info banner on first offline experience (if not dismissed)

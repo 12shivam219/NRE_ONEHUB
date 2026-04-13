@@ -16,8 +16,8 @@ export function useCacheAnalytics() {
         const data = await getCacheAnalytics();
         setAnalytics(data);
         setIsLoading(false);
-      } catch (error) {
-        console.error('Failed to load cache analytics:', error);
+      } catch {
+        // Silently handle analytics loading error
         setIsLoading(false);
       }
     };

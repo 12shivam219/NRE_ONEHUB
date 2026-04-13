@@ -61,38 +61,31 @@ const FolderTreeNode = memo(
 
     const handleToggleExpand = async () => {
       const currentState = expandedState[folder.id] || { isExpanded: false, isLoading: false };
-      console.log(`Toggle expand for folder (${folder.id}):`, { currently: currentState.isExpanded, toBecome: !currentState.isExpanded });
       
       if (currentState.isExpanded) {
         // Collapse
-        console.log(`Collapsing folder`);
         onExpandChange(folder.id, false, currentState.subfolders);
         return;
       }
 
       // Expand - set loading state first
-      console.log(`Expanding folder, fetching subfolders...`);
       onExpandChange(folder.id, true, currentState.subfolders);
 
       // Then load subfolders
       if (!userId) {
-        console.log('No userId, skipping subfolder fetch');
         return;
       }
       try {
         const result = await getFolders(userId, folder.id);
-        console.log(`Subfolder fetch result:`, result);
         if (result.success && result.folders) {
           // Update with loaded subfolders
-          console.log(`Got ${result.folders.length} subfolders`);
           onExpandChange(folder.id, true, result.folders);
         } else {
           // Collapse on error
-          console.error(`Failed to load subfolders: ${result.error}`);
           onExpandChange(folder.id, false, undefined);
         }
-      } catch (error) {
-        console.error('Failed to load subfolders:', error);
+      } catch {
+        // Silently handle subfolder fetch error
         // Collapse on error
         onExpandChange(folder.id, false, undefined);
       }
@@ -244,7 +237,6 @@ export const FolderSidebar = memo(
 
     const handleExpandChange = useCallback(
       (folderId: string, isExpanded: boolean, subfolders?: Folder[]) => {
-        console.log(`handleExpandChange called:`, { folderId, isExpanded, subfoldersCount: subfolders?.length || 0 });
         setExpandedFolders((prev) => {
           const updated = { ...prev };
           updated[folderId] = {
@@ -252,7 +244,6 @@ export const FolderSidebar = memo(
             isLoading: false,
             subfolders,
           };
-          console.log(`Updated expanded folders state:`, updated[folderId]);
           return updated;
         });
       },
@@ -301,7 +292,6 @@ export const FolderSidebar = memo(
           }
         } catch (error) {
           const msg = error instanceof Error ? error.message : 'Unknown error';
-          console.error('Error deleting folder:', error);
           showToast({
             type: 'error',
             title: 'Delete failed',

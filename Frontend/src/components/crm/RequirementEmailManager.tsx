@@ -134,8 +134,8 @@ export const RequirementEmailManager = ({
         
         setTotalEmails(result.total);
         setHasMoreEmails(result.hasMore);
-      } catch (err) {
-        console.error('Error loading emails:', err);
+      } catch {
+        // Silently handle email loading error
         if (currentPage === 0) {
           showToast({
             type: 'error',
@@ -366,8 +366,6 @@ export const RequirementEmailManager = ({
       if (result?.success) {
         // Use the email server's campaign ID for polling (not the frontend campaign ID)
         const emailServerCampaignId = (result as any).emailServerCampaignId || currentCampaignId;  
-        
-        console.log(`[handleSendCampaign] Using campaign ID for polling: ${emailServerCampaignId}`);
         
         // Start polling for real-time progress
         const pollResult = await pollCampaignStatus(emailServerCampaignId, (status) => {

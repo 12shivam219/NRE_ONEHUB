@@ -53,7 +53,6 @@ export class JobExtractionAgent {
         isJobPosting: true,
       };
     } catch (error) {
-      console.error('Error extracting job details:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -93,8 +92,7 @@ export class JobExtractionAgent {
 
         // Add small delay to avoid rate limiting
         await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (error) {
-        console.error(`Error processing email ${email.id}:`, error);
+      } catch {
         results.push({
           success: false,
           error: 'Failed to process email',
