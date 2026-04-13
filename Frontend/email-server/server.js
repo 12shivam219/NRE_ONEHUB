@@ -98,9 +98,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// SECURITY: Configure CORS with whitelist
+// SECURITY: Configure CORS with whitelist (trim each origin — spaces after commas break browser matches)
 const corsOptions = {
-  origin: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(','),
+  origin: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean),
   credentials: true,
   methods: ['POST', 'OPTIONS', 'GET'],
   allowedHeaders: ['Content-Type', 'Authorization'],
