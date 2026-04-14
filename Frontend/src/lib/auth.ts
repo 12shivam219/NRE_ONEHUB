@@ -522,10 +522,13 @@ export const getCurrentSession = async () => {
 
 /** Base URL for Supabase auth redirects (must be listed in Supabase Dashboard → Auth → URL Configuration). */
 export const getAuthRedirectBaseUrl = (): string => {
+  // In browser (production), always use window.location.origin which is correct
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  // Fallback for server-side/build-time scenarios
   const fromEnv = import.meta.env.VITE_APP_URL?.trim().replace(/\/$/, '');
-  if (fromEnv) return fromEnv;
-  if (typeof window !== 'undefined') return window.location.origin;
-  return '';
+  return fromEnv || '';
 };
 
 export interface PasswordResetRequestResponse {
