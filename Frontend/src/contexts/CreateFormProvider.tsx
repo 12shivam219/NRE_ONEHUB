@@ -56,13 +56,14 @@ function CreateFormProvider({ children }: { children: ReactNode }) {
         </DialogContent>
       </Dialog>
 
-      {/* Interview Modal */}
-      <Dialog open={openForm === 'interview'} onClose={closeCreateForm} maxWidth="sm" fullWidth>
-        <DialogTitle>Create Interview</DialogTitle>
-        <DialogContent>
-          <CreateInterviewForm requirementId={selectedRequirementId} onClose={closeCreateForm} onSuccess={closeCreateForm} showDialog={false} />
-        </DialogContent>
-      </Dialog>
+      {/* Interview Drawer (self-managed UI in CreateInterviewForm) */}
+      {openForm === 'interview' && (
+        <CreateInterviewForm
+          requirementId={selectedRequirementId}
+          onClose={closeCreateForm}
+          onSuccess={closeCreateForm}
+        />
+      )}
 
       {/* Consultant Modal */}
       <Dialog open={openForm === 'consultant'} onClose={closeCreateForm} maxWidth="sm" fullWidth>

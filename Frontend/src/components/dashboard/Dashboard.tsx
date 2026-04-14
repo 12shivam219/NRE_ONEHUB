@@ -39,8 +39,8 @@ export const Dashboard = () => {
         getRequirementsCount(user.id),
         getInterviewsPage({ userId: user.id, includeCount: true, limit: 1, offset: 0, scheduledFrom: nowIso, excludeStatus: 'Cancelled' }),
         getInterviewsPage({ userId: user.id, includeCount: true, limit: 1, offset: 0, status: 'Completed' }),
-        getConsultantsPage({ userId: user.id, limit: 1, offset: 0, status: 'Active' }),
-        getConsultantsPage({ userId: user.id, limit: 1, offset: 0, status: 'Recently Placed' }),
+        getConsultantsPage({ limit: 1, offset: 0, status: 'Active' }),
+        getConsultantsPage({ limit: 1, offset: 0, status: 'Recently Placed' }),
       ]);
 
       if (cancelled) return;

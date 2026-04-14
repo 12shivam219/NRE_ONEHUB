@@ -14,6 +14,7 @@ import DialogContent from '@mui/material/DialogContent';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
+import ListSubheader from '@mui/material/ListSubheader';
 import type { SelectChangeEvent } from '@mui/material/Select';
 
 
@@ -84,6 +85,45 @@ const FormField = memo(function FormField({
           size="small"
           fullWidth
           variant="outlined"
+          SelectProps={{
+            displayEmpty: true,
+            renderValue: (selected) => {
+              const selectedValue = String(selected ?? '');
+              if (!selectedValue) {
+                return <span style={{ color: '#9CA3AF' }}>Select {label.toLowerCase()}</span>;
+              }
+              const selectedOption = options?.find((opt) => opt.value === selectedValue);
+              return selectedOption?.label || selectedValue;
+            },
+            MenuProps: {
+              PaperProps: {
+                sx: {
+                  mt: 0.75,
+                  borderRadius: '12px',
+                  border: '1px solid #E5E7EB',
+                  boxShadow: '0 14px 30px rgba(15, 23, 42, 0.12)',
+                  maxHeight: 320,
+                  '& .MuiMenuItem-root': {
+                    minHeight: 38,
+                    px: 1.5,
+                    py: 1,
+                    fontSize: '0.88rem',
+                    '&.Mui-selected': {
+                      backgroundColor: 'rgba(79, 70, 229, 0.08)',
+                      color: '#312E81',
+                      fontWeight: 600,
+                    },
+                    '&.Mui-selected:hover': {
+                      backgroundColor: 'rgba(79, 70, 229, 0.12)',
+                    },
+                    '&:hover': {
+                      backgroundColor: '#F9FAFB',
+                    },
+                  },
+                },
+              },
+            },
+          }}
           InputLabelProps={{ shrink: false, sx: { display: 'none' } }}
           sx={{
             '& .MuiOutlinedInput-root': {
@@ -106,17 +146,39 @@ const FormField = memo(function FormField({
                 fontWeight: 500,
               },
             },
-            '& .MuiMenuItem-root': { fontSize: '0.9rem' },
+            '& .MuiSelect-select': {
+              display: 'flex',
+              alignItems: 'center',
+            },
           }}
         >
-          <MenuItem value="" disabled>
-            <span style={{ color: '#9CA3AF' }}>Select {label.toLowerCase()}</span>
-          </MenuItem>
-          {options?.map((opt) => (
-            <MenuItem key={opt.value} value={opt.value}>
-              {opt.label}
+          <ListSubheader
+            disableSticky
+            sx={{
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              color: '#9CA3AF',
+              py: 1.25,
+              px: 1.5,
+              lineHeight: 1,
+              textTransform: 'uppercase',
+              backgroundColor: '#FFFFFF',
+            }}
+          >
+            {label}
+          </ListSubheader>
+          {options && options.length > 0 ? (
+            options.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </MenuItem>
+            ))
+          ) : (
+            <MenuItem value="__empty__" disabled>
+              <span style={{ color: '#9CA3AF' }}>No {label.toLowerCase()} found</span>
             </MenuItem>
-          ))}
+          )}
         </TextField>
       ) : (
         <TextField
@@ -328,7 +390,7 @@ export const CreateInterviewForm = ({
     if (!user) return;
     const [reqResult, consResult] = await Promise.all([
       getRequirements(user.id),
-      getConsultants(user.id),
+      getConsultants(),
     ]);
     if (reqResult.success && reqResult.requirements) {
       setRequirements(reqResult.requirements);
@@ -778,7 +840,7 @@ export const CreateInterviewForm = ({
           value={formData.consultant_id}
           onChange={handleChange}
           options={consultantOptions}
-          helperText="Optional"
+          helperText={`${consultantOptions.length} consultant${consultantOptions.length === 1 ? '' : 's'} available`}
         />
         <FormField
           label="Interviewer"

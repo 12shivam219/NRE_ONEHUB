@@ -17,6 +17,7 @@ import DialogContent from '@mui/material/DialogContent';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
+import ListSubheader from '@mui/material/ListSubheader';
 import { JDParserDialog } from './JDParserDialog';
 import { BatchJDParserDialog } from './BatchJDParserDialog';
 import type { SelectChangeEvent } from '@mui/material/Select';
@@ -102,6 +103,45 @@ const FormField = memo(function FormField({
           helperText={error || helperText}
           size="small"
           fullWidth
+          SelectProps={{
+            displayEmpty: true,
+            renderValue: (selected) => {
+              const selectedValue = String(selected ?? '');
+              if (!selectedValue) {
+                return <span style={{ color: '#9CA3AF' }}>Select {label.toLowerCase()}</span>;
+              }
+              const selectedOption = options?.find((opt) => opt.value === selectedValue);
+              return selectedOption?.label || selectedValue;
+            },
+            MenuProps: {
+              PaperProps: {
+                sx: {
+                  mt: 0.75,
+                  borderRadius: '12px',
+                  border: '1px solid #E5E7EB',
+                  boxShadow: '0 14px 30px rgba(15, 23, 42, 0.12)',
+                  maxHeight: 320,
+                  '& .MuiMenuItem-root': {
+                    minHeight: 38,
+                    px: 1.5,
+                    py: 1,
+                    fontSize: '0.88rem',
+                    '&.Mui-selected': {
+                      backgroundColor: 'rgba(79, 70, 229, 0.08)',
+                      color: '#312E81',
+                      fontWeight: 600,
+                    },
+                    '&.Mui-selected:hover': {
+                      backgroundColor: 'rgba(79, 70, 229, 0.12)',
+                    },
+                    '&:hover': {
+                      backgroundColor: '#F9FAFB',
+                    },
+                  },
+                },
+              },
+            },
+          }}
           InputLabelProps={{
             shrink: false,
             sx: { display: 'none' }
@@ -140,16 +180,39 @@ const FormField = memo(function FormField({
               marginTop: '0.375rem',
               color: error ? '#EF4444' : '#6B7280',
             },
+            '& .MuiSelect-select': {
+              display: 'flex',
+              alignItems: 'center',
+            },
           }}
         >
-          <MenuItem value="" disabled>
-            <span style={{ color: '#9CA3AF' }}>Select {label.toLowerCase()}</span>
-          </MenuItem>
-          {options?.map((opt: FormFieldOption) => (
-            <MenuItem key={opt.value} value={opt.value}>
-              {opt.label}
+          <ListSubheader
+            disableSticky
+            sx={{
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              color: '#9CA3AF',
+              py: 1.25,
+              px: 1.5,
+              lineHeight: 1,
+              textTransform: 'uppercase',
+              backgroundColor: '#FFFFFF',
+            }}
+          >
+            {label}
+          </ListSubheader>
+          {options && options.length > 0 ? (
+            options.map((opt: FormFieldOption) => (
+              <MenuItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </MenuItem>
+            ))
+          ) : (
+            <MenuItem value="__empty__" disabled>
+              <span style={{ color: '#9CA3AF' }}>No {label.toLowerCase()} found</span>
             </MenuItem>
-          ))}
+          )}
         </TextField>
       ) : (
         <TextField
@@ -358,7 +421,7 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
 
   const loadConsultants = useCallback(async () => {
     if (!user) return;
-    const result = await getConsultants(user.id);
+    const result = await getConsultants();
     if (result.success && result.consultants) {
       setConsultants(result.consultants);
     }
@@ -1043,7 +1106,14 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
                 { label: 'Closed', value: 'CLOSED' },
               ]}
             />
-            <div style={{ gridColumn: '1 / -1' }}>
+            <div
+              style={{
+                gridColumn: '1 / -1',
+                maxWidth: '420px',
+                paddingTop: '4px',
+                marginBottom: '4px',
+              }}
+            >
               <FormField
                 label="Assigned Consultant"
                 name="consultant_id"
@@ -1052,6 +1122,7 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
                 value={formData.consultant_id}
                 onChange={handleChange}
                 options={consultantOptions}
+                helperText={`${consultantOptions.length} consultant${consultantOptions.length === 1 ? '' : 's'} available`}
               />
             </div>
           </FormSection>

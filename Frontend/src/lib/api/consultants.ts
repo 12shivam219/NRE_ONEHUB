@@ -41,7 +41,9 @@ export const getConsultantsPageCursor = async (options: {
 
     if (search && search.trim()) {
       const term = `%${search.trim()}%`;
-      query = query.or(`name.ilike.${term},email.ilike.${term},primary_skills.ilike.${term}`);
+      query = query.or(
+        `name.ilike.${term},email.ilike.${term},phone.ilike.${term},primary_skills.ilike.${term},secondary_skills.ilike.${term}`
+      );
     }
 
     // Cursor-based pagination
@@ -147,7 +149,9 @@ export const getConsultantsPage = async (options: {
     if (search && search.trim()) {
       const term = `%${search.trim()}%`;
       // Use ilike for trigram-optimized search (enable pg_trgm for best performance)
-      query = query.or(`name.ilike.${term},email.ilike.${term},primary_skills.ilike.${term}`);
+      query = query.or(
+        `name.ilike.${term},email.ilike.${term},phone.ilike.${term},primary_skills.ilike.${term},secondary_skills.ilike.${term}`
+      );
     }
 
     // Server-side pagination
@@ -328,7 +332,9 @@ export const searchConsultants = async (
     const { data, error } = await supabase
       .from('consultants')
       .select('*')
-      .or(`name.ilike.${term},email.ilike.${term},primary_skills.ilike.${term}`)
+      .or(
+        `name.ilike.${term},email.ilike.${term},phone.ilike.${term},primary_skills.ilike.${term},secondary_skills.ilike.${term}`
+      )
       .order('updated_at', { ascending: false })
       .limit(limit);
 

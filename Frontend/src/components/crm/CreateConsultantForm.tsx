@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, memo, useMemo } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../contexts/ToastContext';
@@ -47,9 +47,9 @@ interface FormFieldProps {
   required?: boolean;
   options?: FormFieldOption[];
   error?: string;
+  helperText?: string;
 }
 
-// Create FormField component outside the parent component for stability
 const FormField = memo(function FormField({
   label,
   name,
@@ -60,23 +60,57 @@ const FormField = memo(function FormField({
   required = false,
   options,
   error,
+  helperText,
 }: FormFieldProps) {
+  const textFieldSx = {
+    '& .MuiFormHelperText-root': {
+      marginLeft: 0,
+      marginRight: 0,
+      minHeight: helperText || error ? '18px' : 0,
+      fontSize: '0.75rem',
+      color: error ? '#B42318' : '#667085',
+    },
+    '& .MuiOutlinedInput-root': {
+      backgroundColor: '#FFFFFF',
+      borderRadius: '10px',
+      transition: 'all 0.18s ease',
+      '& fieldset': {
+        borderColor: '#D1D5DB',
+      },
+      '&:hover fieldset': {
+        borderColor: '#9CA3AF',
+      },
+      '&.Mui-focused fieldset': {
+        borderColor: '#4F46E5',
+        borderWidth: '1px',
+      },
+      '&.Mui-focused': {
+        boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.16)',
+      },
+    },
+  };
+
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <label htmlFor={name} style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>
+        {label}
+        {required && <span style={{ color: '#DC2626', marginLeft: '4px' }}>*</span>}
+      </label>
       {type === 'select' ? (
         <TextField
           select
-          label={label}
+          id={name}
           name={name}
           value={value}
           onChange={onChange}
           required={required}
           error={Boolean(error)}
-          helperText={error || ' '}
+          helperText={error || helperText}
           size="small"
           fullWidth
+          sx={textFieldSx}
         >
-          <MenuItem value="">Select {label.toLowerCase()}</MenuItem>
+          <MenuItem value="">Select</MenuItem>
           {options?.map((opt: FormFieldOption) => (
             <MenuItem key={opt.value} value={opt.value}>
               {opt.label}
@@ -85,7 +119,7 @@ const FormField = memo(function FormField({
         </TextField>
       ) : (
         <TextField
-          label={label}
+          id={name}
           name={name}
           type={type === 'textarea' ? 'text' : type}
           value={value}
@@ -93,11 +127,12 @@ const FormField = memo(function FormField({
           placeholder={placeholder}
           required={required}
           error={Boolean(error)}
-          helperText={error || ' '}
+          helperText={error || helperText}
           size="small"
           fullWidth
           multiline={type === 'textarea'}
           rows={type === 'textarea' ? 4 : undefined}
+          sx={textFieldSx}
         />
       )}
     </div>
@@ -109,12 +144,12 @@ interface CreateConsultantFormProps {
   onSuccess: () => void;
 }
 
-const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="border-t border-gray-200 pt-6 mt-6 first:border-t-0 first:pt-0 first:mt-0">
-    <h3 className="text-xs font-medium text-gray-900 mb-4">{title}</h3>
-    <div className="space-y-4">{children}</div>
-  </div>
-);
+type WizardStep = {
+  key: string;
+  title: string;
+  description: string;
+  optional?: boolean;
+};
 
 export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFormProps) => {
   const { user } = useAuth();
@@ -124,6 +159,10 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [animationDirection, setAnimationDirection] = useState<'forward' | 'backward'>('forward');
+  const [showMoreBackground, setShowMoreBackground] = useState(false);
+  const [showMoreAdditional, setShowMoreAdditional] = useState(false);
 
   const [formData, setFormData] = useState({
     status: 'Active',
@@ -166,6 +205,42 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
     currently_working: false,
     description: '',
   });
+
+  const steps: WizardStep[] = useMemo(
+    () => [
+      {
+        key: 'basic',
+        title: 'Basic Information',
+        description: 'Core details we need to create the consultant profile.',
+      },
+      {
+        key: 'skills',
+        title: 'Skills & Experience',
+        description: 'Capture technical strengths and current availability.',
+      },
+      {
+        key: 'online',
+        title: 'Online Presence',
+        description: 'Add public links to make shortlisting easier.',
+        optional: true,
+      },
+      {
+        key: 'background',
+        title: 'Background Details',
+        description: 'Personal, education, and work preference context.',
+      },
+      {
+        key: 'additional',
+        title: 'Additional Info',
+        description: 'Payroll and project details to complete the profile.',
+        optional: true,
+      },
+    ],
+    []
+  );
+
+  const isLastStep = currentStep === steps.length - 1;
+  const completionPercent = Math.round(((currentStep + 1) / steps.length) * 100);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent<string>) => {
     const { name, value } = e.target as { name: string; value: string };
@@ -301,18 +376,319 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
     setProjects(projects.filter(p => p.id !== id));
   };
 
+  const validateStep = useCallback(() => {
+    const nextErrors: Record<string, string> = {};
+
+    if (currentStep === 0) {
+      if (!formData.name.trim()) nextErrors.name = 'Name is required';
+      if (formData.email.trim() && !formData.email.includes('@')) nextErrors.email = 'Enter a valid email';
+      if (formData.phone.trim() && formData.phone.trim().length < 7) nextErrors.phone = 'Enter a valid phone number';
+    }
+
+    if (currentStep === 3) {
+      if (formData.date_of_birth.trim() && Number.isNaN(Date.parse(formData.date_of_birth))) {
+        nextErrors.date_of_birth = 'Enter a valid date';
+      }
+      if (formData.expected_rate.trim() && formData.expected_rate.trim().length < 2) {
+        nextErrors.expected_rate = 'Expected rate looks too short';
+      }
+    }
+
+    setFormErrors(prev => ({ ...prev, ...nextErrors }));
+    return Object.keys(nextErrors).length === 0;
+  }, [currentStep, formData]);
+
+  const handleNext = () => {
+    if (!validateStep()) {
+      showToast({
+        type: 'error',
+        title: 'Check this step',
+        message: 'Please fix the highlighted fields before continuing',
+      });
+      return;
+    }
+    setAnimationDirection('forward');
+    setCurrentStep(prev => Math.min(prev + 1, steps.length - 1));
+  };
+
+  const handleBack = () => {
+    setAnimationDirection('backward');
+    setCurrentStep(prev => Math.max(prev - 1, 0));
+  };
+
+  const handleSkip = () => {
+    setAnimationDirection('forward');
+    setCurrentStep(prev => Math.min(prev + 1, steps.length - 1));
+  };
+
+  const handleStepPillClick = (targetIndex: number) => {
+    if (targetIndex === currentStep) return;
+
+    if (targetIndex > currentStep) {
+      if (!validateStep()) {
+        showToast({
+          type: 'error',
+          title: 'Finish this step first',
+          message: 'Please resolve required or invalid fields before jumping ahead',
+        });
+        return;
+      }
+      setAnimationDirection('forward');
+      setCurrentStep(targetIndex);
+      return;
+    }
+
+    setAnimationDirection('backward');
+    setCurrentStep(targetIndex);
+  };
+
+  const stepContent = (
+    <Box
+      key={steps[currentStep].key}
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: '1fr',
+        rowGap: '16px',
+        animation: `${animationDirection === 'forward' ? 'wizardStepInForward' : 'wizardStepInBackward'} 180ms ease`,
+        '@keyframes wizardStepInForward': {
+          '0%': { opacity: 0, transform: 'translateX(12px) translateY(2px)' },
+          '100%': { opacity: 1, transform: 'translateX(0) translateY(0)' },
+        },
+        '@keyframes wizardStepInBackward': {
+          '0%': { opacity: 0, transform: 'translateX(-12px) translateY(2px)' },
+          '100%': { opacity: 1, transform: 'translateX(0) translateY(0)' },
+        },
+      }}
+    >
+      {currentStep === 0 && (
+        <>
+          <FormField
+            label="Status"
+            name="status"
+            type="select"
+            value={formData.status}
+            onChange={handleChange}
+            options={[
+              { label: 'Active', value: 'Active' },
+              { label: 'Inactive', value: 'Inactive' },
+              { label: 'Recently Placed', value: 'Recently Placed' },
+              { label: 'Not Available', value: 'Not Available' },
+            ]}
+            required
+          />
+          <FormField label="Full Name" name="name" value={formData.name} onChange={handleChange} required error={formErrors.name} />
+          <FormField label="Email" name="email" type="email" value={formData.email} onChange={handleChange} error={formErrors.email} />
+          <FormField label="Phone" name="phone" type="tel" value={formData.phone} onChange={handleChange} error={formErrors.phone} />
+          <FormField label="Location" name="location" value={formData.location} onChange={handleChange} />
+        </>
+      )}
+
+      {currentStep === 1 && (
+        <>
+          <FormField label="Primary Skills" name="primary_skills" value={formData.primary_skills} onChange={handleChange} />
+          <FormField label="Secondary Skills" name="secondary_skills" value={formData.secondary_skills} onChange={handleChange} />
+          <FormField label="Total Experience" name="total_experience" value={formData.total_experience} onChange={handleChange} />
+          <FormField
+            label="Availability"
+            name="availability"
+            type="select"
+            value={formData.availability}
+            onChange={handleChange}
+            options={[
+              { label: 'Immediate', value: 'Immediate' },
+              { label: 'Two Weeks', value: 'Two Weeks' },
+              { label: 'One Month', value: 'One Month' },
+              { label: 'Two Months', value: 'Two Months' },
+              { label: 'Flexible', value: 'Flexible' },
+            ]}
+          />
+        </>
+      )}
+
+      {currentStep === 2 && (
+        <>
+          <FormField label="LinkedIn Profile" name="linkedin_profile" type="url" value={formData.linkedin_profile} onChange={handleChange} />
+          <FormField label="Portfolio Link" name="portfolio_link" type="url" value={formData.portfolio_link} onChange={handleChange} />
+        </>
+      )}
+
+      {currentStep === 3 && (
+        <>
+          <FormField label="Date of Birth" name="date_of_birth" type="date" value={formData.date_of_birth} onChange={handleChange} error={formErrors.date_of_birth} />
+          <FormField label="Address" name="address" value={formData.address} onChange={handleChange} />
+          <FormField
+            label="Timezone"
+            name="timezone"
+            type="select"
+            value={formData.timezone}
+            onChange={handleChange}
+            options={[
+              { label: 'UTC', value: 'UTC' },
+              { label: 'EST (UTC-5)', value: 'EST' },
+              { label: 'CST (UTC-6)', value: 'CST' },
+              { label: 'MST (UTC-7)', value: 'MST' },
+              { label: 'PST (UTC-8)', value: 'PST' },
+              { label: 'IST (UTC+5:30)', value: 'IST' },
+              { label: 'GST (UTC+4)', value: 'GST' },
+            ]}
+          />
+          <FormField label="Degree Name" name="degree_name" value={formData.degree_name} onChange={handleChange} />
+          <FormField
+            label="Visa Status"
+            name="visa_status"
+            type="select"
+            value={formData.visa_status}
+            onChange={handleChange}
+            options={[
+              { label: 'US Citizen', value: 'US Citizen' },
+              { label: 'Green Card', value: 'Green Card' },
+              { label: 'H1B', value: 'H1B' },
+              { label: 'L1', value: 'L1' },
+              { label: 'E2', value: 'E2' },
+              { label: 'O1', value: 'O1' },
+              { label: 'Other', value: 'Other' },
+            ]}
+          />
+          <FormField label="Expected Rate" name="expected_rate" value={formData.expected_rate} onChange={handleChange} error={formErrors.expected_rate} />
+          <Button type="button" variant="text" color="inherit" onClick={() => setShowMoreBackground(prev => !prev)} sx={{ justifySelf: 'start', px: 0 }}>
+            {showMoreBackground ? 'Hide extra background details' : 'Add more background details'}
+          </Button>
+          {showMoreBackground && (
+            <>
+              <FormField label="University" name="university" value={formData.university} onChange={handleChange} />
+              <FormField label="Year of Passing" name="year_of_passing" type="number" value={formData.year_of_passing} onChange={handleChange} />
+              <FormField label="Country of Origin" name="country_of_origin" value={formData.country_of_origin} onChange={handleChange} />
+              <FormField label="How Got Visa" name="how_got_visa" value={formData.how_got_visa} onChange={handleChange} />
+              <FormField label="Year Came to US" name="year_came_to_us" type="number" value={formData.year_came_to_us} onChange={handleChange} />
+              <FormField label="SSN (last 4)" name="ssn" value={formData.ssn} onChange={handleChange} />
+            </>
+          )}
+        </>
+      )}
+
+      {currentStep === 4 && (
+        <>
+          <FormField
+            label="Why Looking For Job"
+            name="why_looking_for_job"
+            type="textarea"
+            value={formData.why_looking_for_job}
+            onChange={handleChange}
+          />
+          <FormField
+            label="Preferred Work Location"
+            name="preferred_work_location"
+            type="select"
+            value={formData.preferred_work_location}
+            onChange={handleChange}
+            options={[
+              { label: 'Remote', value: 'Remote' },
+              { label: 'Hybrid', value: 'Hybrid' },
+              { label: 'Onsite', value: 'Onsite' },
+              { label: 'Flexible', value: 'Flexible' },
+            ]}
+          />
+          <FormField
+            label="Preferred Work Type"
+            name="preferred_work_type"
+            type="select"
+            value={formData.preferred_work_type}
+            onChange={handleChange}
+            options={[
+              { label: 'Full-time', value: 'Full-time' },
+              { label: 'Contract', value: 'Contract' },
+              { label: 'Freelance', value: 'Freelance' },
+              { label: 'Permanent', value: 'Permanent' },
+            ]}
+          />
+          <FormField label="Payroll Company" name="payroll_company" value={formData.payroll_company} onChange={handleChange} />
+          <FormField label="Payroll Contact Info" name="payroll_contact_info" value={formData.payroll_contact_info} onChange={handleChange} />
+          <Button type="button" variant="text" color="inherit" onClick={() => setShowMoreAdditional(prev => !prev)} sx={{ justifySelf: 'start', px: 0 }}>
+            {showMoreAdditional ? 'Hide project details' : 'Add project details'}
+          </Button>
+
+          {showMoreAdditional && projects.length > 0 && (
+            <div style={{ display: 'grid', rowGap: '12px' }}>
+              {projects.map(project => (
+                <Paper key={project.id} variant="outlined" sx={{ p: 2, borderRadius: '10px' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                        {project.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {project.domain} {project.city ? `• ${project.city}` : ''}
+                      </Typography>
+                    </Box>
+                    <IconButton type="button" onClick={() => handleRemoveProject(project.id)} color="error" aria-label="Remove project">
+                      <Trash2 className="w-4 h-4" />
+                    </IconButton>
+                  </Box>
+                </Paper>
+              ))}
+            </div>
+          )}
+
+          {showMoreAdditional && !showProjectForm ? (
+            <Button type="button" variant="outlined" onClick={() => setShowProjectForm(true)}>
+              Add Project
+            </Button>
+          ) : showMoreAdditional ? (
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: '10px', backgroundColor: '#F9FAFB' }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2, mb: 2 }}>
+                <TextField label="Project Name" name="name" value={projectForm.name} onChange={handleProjectFormChange} size="small" fullWidth />
+                <TextField label="Domain" name="domain" value={projectForm.domain} onChange={handleProjectFormChange} size="small" fullWidth />
+                <TextField label="City" name="city" value={projectForm.city} onChange={handleProjectFormChange} size="small" fullWidth />
+                <TextField label="State" name="state" value={projectForm.state} onChange={handleProjectFormChange} size="small" fullWidth />
+                <TextField label="Start Date" type="date" name="start_date" value={projectForm.start_date} onChange={handleProjectFormChange} size="small" fullWidth InputLabelProps={{ shrink: true }} />
+                <TextField label="End Date" type="date" name="end_date" disabled={projectForm.currently_working} value={projectForm.end_date} onChange={handleProjectFormChange} size="small" fullWidth InputLabelProps={{ shrink: true }} />
+                <FormControlLabel
+                  control={<Checkbox name="currently_working" checked={projectForm.currently_working} onChange={handleProjectFormChange} />}
+                  label="Currently Working"
+                />
+                <TextField label="Description" name="description" value={projectForm.description} onChange={handleProjectFormChange} size="small" fullWidth multiline rows={3} />
+              </Box>
+
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <Button type="button" variant="contained" onClick={handleAddProject} sx={{ flex: 1 }}>
+                  Save Project
+                </Button>
+                <Button type="button" variant="outlined" color="inherit" onClick={() => setShowProjectForm(false)} sx={{ flex: 1 }}>
+                  Cancel
+                </Button>
+              </Stack>
+            </Paper>
+          ) : null}
+        </>
+      )}
+    </Box>
+  );
+
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="lg" scroll="paper">
-      <DialogTitle sx={{ pr: 7, fontWeight: 500 }}>
+    <Dialog
+      open
+      onClose={onClose}
+      fullWidth
+      maxWidth="sm"
+      scroll="paper"
+      PaperProps={{
+        sx: {
+          borderRadius: '16px',
+          border: '1px solid #E5E7EB',
+          boxShadow: '0 20px 50px rgba(16, 24, 40, 0.16)',
+          maxHeight: '92vh',
+        },
+      }}
+    >
+      <DialogTitle sx={{ pr: 7, fontWeight: 700, fontSize: '1.05rem', py: 2.25, borderBottom: '1px solid #F2F4F7' }}>
         Add New Consultant
-        <IconButton onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }} aria-label="Close">
+        <IconButton onClick={onClose} sx={{ position: 'absolute', right: 12, top: 10 }} aria-label="Close">
           <X className="w-6 h-6" />
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Submit Error Alert */}
+      <DialogContent dividers sx={{ p: 3, backgroundColor: '#FCFCFD', overflowY: 'auto' }}>
+        <form onSubmit={handleSubmit}>
           {submitError && (
             <ErrorAlert
               title="Failed to Add Consultant"
@@ -322,493 +698,169 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
             />
           )}
 
-          {/* Basic Information */}
-          <FormSection title="Basic Information">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                label="What's your status?"
-                name="status"
-                type="select"
-                value={formData.status}
-                onChange={handleChange}
-                options={[
-                  { label: 'Active', value: 'Active' },
-                  { label: 'Inactive', value: 'Inactive' },
-                  { label: 'Recently Placed', value: 'Recently Placed' },
-                  { label: 'Not Available', value: 'Not Available' },
-                ]}
-                required
-              />
-              <FormField
-                label="What's your full name?"
-                name="name"
-                placeholder="John Smith"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                error={formErrors.name}
-              />
-              <FormField
-                label="What's your email address?"
-                name="email"
-                type="email"
-                placeholder="john@example.com"
-                value={formData.email}
-                onChange={handleChange}
-                error={formErrors.email}
-              />
-              <FormField
-                label="What's your phone number?"
-                name="phone"
-                type="tel"
-                placeholder="(555) 123-4567"
-                value={formData.phone}
-                onChange={handleChange}
-                error={formErrors.phone}
-              />
-            </div>
-          </FormSection>
-
-          {/* Skills & Experience */}
-          <FormSection title="Skills & Experience">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                label="What's your primary skill set?"
-                name="primary_skills"
-                placeholder="Java, Python, AWS"
-                value={formData.primary_skills}
-                onChange={handleChange}
-              />
-              <FormField
-                label="Any secondary skills?"
-                name="secondary_skills"
-                placeholder="Docker, Kubernetes, SQL"
-                value={formData.secondary_skills}
-                onChange={handleChange}
-              />
-              <FormField
-                label="How many years of experience do you have?"
-                name="total_experience"
-                placeholder="5 years, 10+ years"
-                value={formData.total_experience}
-                onChange={handleChange}
-              />
-              <FormField
-                label="When are you available to start?"
-                name="availability"
-                type="select"
-                value={formData.availability}
-                onChange={handleChange}
-                options={[
-                  { label: 'Immediate', value: 'Immediate' },
-                  { label: 'Two Weeks', value: 'Two Weeks' },
-                  { label: 'One Month', value: 'One Month' },
-                  { label: 'Two Months', value: 'Two Months' },
-                  { label: 'Flexible', value: 'Flexible' },
-                ]}
-              />
-            </div>
-          </FormSection>
-
-          {/* Online Presence */}
-          <FormSection title="Online Presence">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                label="What's your LinkedIn profile URL?"
-                name="linkedin_profile"
-                type="url"
-                placeholder="https://linkedin.com/in/username"
-                value={formData.linkedin_profile}
-                onChange={handleChange}
-              />
-              <FormField
-                label="Do you have a portfolio website?"
-                name="portfolio_link"
-                type="url"
-                placeholder="https://yourportfolio.com"
-                value={formData.portfolio_link}
-                onChange={handleChange}
-              />
-            </div>
-          </FormSection>
-
-          {/* Location & Timezone */}
-          <FormSection title="Location & Timezone">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                label="What's your current location?"
-                name="location"
-                placeholder="San Francisco, CA"
-                value={formData.location}
-                onChange={handleChange}
-              />
-              <FormField
-                label="What's your timezone?"
-                name="timezone"
-                type="select"
-                value={formData.timezone}
-                onChange={handleChange}
-                options={[
-                  { label: 'UTC', value: 'UTC' },
-                  { label: 'EST (UTC-5)', value: 'EST' },
-                  { label: 'CST (UTC-6)', value: 'CST' },
-                  { label: 'MST (UTC-7)', value: 'MST' },
-                  { label: 'PST (UTC-8)', value: 'PST' },
-                  { label: 'IST (UTC+5:30)', value: 'IST' },
-                  { label: 'GST (UTC+4)', value: 'GST' },
-                ]}
-              />
-              <FormField
-                label="What's your full address?"
-                name="address"
-                placeholder="123 Main St, City, State, ZIP"
-                value={formData.address}
-                onChange={handleChange}
-              />
-            </div>
-          </FormSection>
-
-          {/* Education */}
-          <FormSection title="Education">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                label="What degree did you earn?"
-                name="degree_name"
-                placeholder="Bachelor's in Computer Science"
-                value={formData.degree_name}
-                onChange={handleChange}
-              />
-              <FormField
-                label="Which university did you attend?"
-                name="university"
-                placeholder="University Name"
-                value={formData.university}
-                onChange={handleChange}
-              />
-              <FormField
-                label="When did you graduate?"
-                name="year_of_passing"
-                type="number"
-                placeholder="2020"
-                value={formData.year_of_passing}
-                onChange={handleChange}
-              />
-            </div>
-          </FormSection>
-
-          {/* Immigration & Personal */}
-          <FormSection title="Immigration & Personal Information">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                label="What's your country of origin?"
-                name="country_of_origin"
-                placeholder="India, Canada, etc."
-                value={formData.country_of_origin}
-                onChange={handleChange}
-              />
-              <FormField
-                label="What's your visa status?"
-                name="visa_status"
-                type="select"
-                value={formData.visa_status}
-                onChange={handleChange}
-                options={[
-                  { label: 'US Citizen', value: 'US Citizen' },
-                  { label: 'Green Card', value: 'Green Card' },
-                  { label: 'H1B', value: 'H1B' },
-                  { label: 'L1', value: 'L1' },
-                  { label: 'E2', value: 'E2' },
-                  { label: 'O1', value: 'O1' },
-                  { label: 'Other', value: 'Other' },
-                ]}
-              />
-              <FormField
-                label="How did you obtain your visa?"
-                name="how_got_visa"
-                placeholder="Sponsorship, Self-sponsored, etc."
-                value={formData.how_got_visa}
-                onChange={handleChange}
-              />
-              <FormField
-                label="What year did you come to the US?"
-                name="year_came_to_us"
-                type="number"
-                placeholder="2018"
-                value={formData.year_came_to_us}
-                onChange={handleChange}
-              />
-              <FormField
-                label="What's your date of birth?"
-                name="date_of_birth"
-                type="date"
-                value={formData.date_of_birth}
-                onChange={handleChange}
-                error={formErrors.date_of_birth}
-              />
-              <FormField
-                label="What's your SSN (last 4 digits)?"
-                name="ssn"
-                placeholder="1234"
-                value={formData.ssn}
-                onChange={handleChange}
-              />
-            </div>
-          </FormSection>
-
-          {/* Work Preferences */}
-          <FormSection title="Work Preferences">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                label="What's your preferred work location?"
-                name="preferred_work_location"
-                type="select"
-                value={formData.preferred_work_location}
-                onChange={handleChange}
-                options={[
-                  { label: 'Remote', value: 'Remote' },
-                  { label: 'Hybrid', value: 'Hybrid' },
-                  { label: 'Onsite', value: 'Onsite' },
-                  { label: 'Flexible', value: 'Flexible' },
-                ]}
-              />
-              <FormField
-                label="What type of work are you looking for?"
-                name="preferred_work_type"
-                type="select"
-                value={formData.preferred_work_type}
-                onChange={handleChange}
-                options={[
-                  { label: 'Full-time', value: 'Full-time' },
-                  { label: 'Contract', value: 'Contract' },
-                  { label: 'Freelance', value: 'Freelance' },
-                  { label: 'Permanent', value: 'Permanent' },
-                ]}
-              />
-              <FormField
-                label="What's your expected rate?"
-                name="expected_rate"
-                placeholder="$80-120/hr or $100k-150k/year"
-                value={formData.expected_rate}
-                onChange={handleChange}
-                error={formErrors.expected_rate}
-              />
-              <FormField
-                label="Why are you looking for a new opportunity?"
-                name="why_looking_for_job"
-                type="textarea"
-                placeholder="Career growth, new challenges, relocation, etc."
-                value={formData.why_looking_for_job}
-                onChange={handleChange}
-              />
-            </div>
-          </FormSection>
-
-          {/* Payroll Information */}
-          <FormSection title="Payroll Information">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                label="Which payroll company do you prefer?"
-                name="payroll_company"
-                placeholder="ADP, Paychex, etc."
-                value={formData.payroll_company}
-                onChange={handleChange}
-              />
-              <FormField
-                label="What's your payroll contact information?"
-                name="payroll_contact_info"
-                placeholder="Name, email, or phone"
-                value={formData.payroll_contact_info}
-                onChange={handleChange}
-              />
-            </div>
-          </FormSection>
-
-          {/* Projects */}
-          <FormSection title="Project Experience">
-            <div className="space-y-4">
-              {projects.length > 0 && (
-                <div className="space-y-3">
-                  {projects.map(project => (
-                    <Paper
-                      key={project.id}
-                      variant="outlined"
-                      sx={{ p: 2, display: 'flex', justifyContent: 'space-between', gap: 2, bgcolor: 'rgba(212,175,55,0.08)' }}
-                    >
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                          {project.name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {project.domain} • {project.city}, {project.state}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {project.start_date} - {project.currently_working ? 'Present' : project.end_date}
-                        </Typography>
-                        {project.description && (
-                          <Typography variant="body2" sx={{ mt: 1, whiteSpace: 'pre-wrap' }}>
-                            {project.description}
-                          </Typography>
-                        )}
-                      </Box>
-                      <IconButton
-                        type="button"
-                        onClick={() => handleRemoveProject(project.id)}
-                        color="error"
-                        aria-label="Remove project"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </IconButton>
-                    </Paper>
-                  ))}
-                </div>
+          <Box sx={{ mb: 3.5 }}>
+            <Typography sx={{ fontSize: '1.35rem', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.01em' }}>
+              {steps[currentStep].title}
+              {steps[currentStep].optional && (
+                <Typography
+                  component="span"
+                  sx={{
+                    ml: 1.25,
+                    px: 1,
+                    py: 0.3,
+                    fontSize: '0.68rem',
+                    color: '#344054',
+                    fontWeight: 700,
+                    borderRadius: 999,
+                    border: '1px solid #D0D5DD',
+                    backgroundColor: '#FFFFFF',
+                    verticalAlign: 'middle',
+                  }}
+                >
+                  Optional
+                </Typography>
               )}
+            </Typography>
+            <Typography sx={{ mt: 0.75, color: '#667085', fontSize: '0.9rem', lineHeight: 1.5 }}>
+              {steps[currentStep].description}
+            </Typography>
+            <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Typography sx={{ fontSize: '0.78rem', color: '#475467', fontWeight: 600 }}>
+                Step {currentStep + 1} of {steps.length}
+              </Typography>
+              <Typography sx={{ fontSize: '0.78rem', color: '#667085', fontWeight: 600 }}>
+                {completionPercent}% Complete
+              </Typography>
+            </Box>
+            <Box sx={{ mt: 1, height: 7, backgroundColor: '#EAECF0', borderRadius: 999, overflow: 'hidden' }}>
+              <Box
+                sx={{
+                  height: '100%',
+                  width: `${((currentStep + 1) / steps.length) * 100}%`,
+                  background: 'linear-gradient(90deg, #5B4BFF 0%, #6941C6 100%)',
+                  borderRadius: 999,
+                  transition: 'width 180ms ease',
+                }}
+              />
+            </Box>
+            <Box
+              sx={{
+                mt: 1.5,
+                display: 'flex',
+                gap: 1,
+                overflowX: 'auto',
+                pb: 0.5,
+                '&::-webkit-scrollbar': { height: 6 },
+                '&::-webkit-scrollbar-thumb': { backgroundColor: '#D0D5DD', borderRadius: 999 },
+              }}
+            >
+              {steps.map((step, idx) => {
+                const active = idx === currentStep;
+                const completed = idx < currentStep;
+                return (
+                  <Button
+                    key={step.key}
+                    type="button"
+                    variant={active ? 'contained' : 'outlined'}
+                    onClick={() => handleStepPillClick(idx)}
+                    sx={{
+                      whiteSpace: 'nowrap',
+                      minWidth: 'fit-content',
+                      px: 1.4,
+                      py: 0.45,
+                      borderRadius: 999,
+                      textTransform: 'none',
+                      fontSize: '0.74rem',
+                      fontWeight: 700,
+                      borderColor: active ? 'transparent' : '#D0D5DD',
+                      color: active ? '#FFFFFF' : completed ? '#344054' : '#475467',
+                      background: active ? 'linear-gradient(90deg, #5B4BFF 0%, #6941C6 100%)' : '#FFFFFF',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {step.title}
+                    {step.optional ? ' (Optional)' : ''}
+                  </Button>
+                );
+              })}
+            </Box>
+          </Box>
 
-              {!showProjectForm ? (
+          {stepContent}
+
+          <Box
+            sx={{
+              mt: 4,
+              pt: 2.5,
+              borderTop: '1px solid #E5E7EB',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1.5,
+            }}
+          >
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {currentStep > 0 && (
                 <Button
                   type="button"
                   variant="outlined"
-                  onClick={() => setShowProjectForm(true)}
-                  sx={{ width: '100%', borderStyle: 'dashed', borderWidth: 2 }}
+                  color="inherit"
+                  onClick={handleBack}
+                  sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#D0D5DD', color: '#344054' }}
                 >
-                  + Add Project
+                  Back
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="text"
+                color="inherit"
+                onClick={onClose}
+                sx={{ textTransform: 'none', fontWeight: 600, color: '#475467' }}
+              >
+                Cancel
+              </Button>
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {steps[currentStep].optional && !isLastStep && (
+                <Button type="button" variant="text" color="inherit" onClick={handleSkip} sx={{ textTransform: 'none', fontWeight: 600, color: '#475467' }}>
+                  Skip
+                </Button>
+              )}
+              {isLastStep ? (
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={loading}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    px: 2.2,
+                    background: 'linear-gradient(90deg, #5B4BFF 0%, #6941C6 100%)',
+                    boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 20px rgba(91, 75, 255, 0.25)',
+                  }}
+                >
+                  {loading ? 'Adding...' : 'Submit'}
                 </Button>
               ) : (
-                <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                      gap: 2,
-                      mb: 2,
-                    }}
-                  >
-                    <TextField
-                      label="Project name"
-                      name="name"
-                      value={projectForm.name}
-                      onChange={handleProjectFormChange}
-                      size="small"
-                      fullWidth
-                    />
-                    <TextField
-                      label="Project domain"
-                      name="domain"
-                      value={projectForm.domain}
-                      onChange={handleProjectFormChange}
-                      size="small"
-                      fullWidth
-                    />
-                    <TextField
-                      label="City"
-                      name="city"
-                      value={projectForm.city}
-                      onChange={handleProjectFormChange}
-                      size="small"
-                      fullWidth
-                    />
-                    <TextField
-                      label="State"
-                      name="state"
-                      value={projectForm.state}
-                      onChange={handleProjectFormChange}
-                      size="small"
-                      fullWidth
-                    />
-                    <TextField
-                      label="Start date"
-                      type="date"
-                      name="start_date"
-                      value={projectForm.start_date}
-                      onChange={handleProjectFormChange}
-                      size="small"
-                      fullWidth
-                      InputLabelProps={{ shrink: true }}
-                    />
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 1 }}>
-                      <TextField
-                        label="End date"
-                        type="date"
-                        name="end_date"
-                        disabled={projectForm.currently_working}
-                        value={projectForm.end_date}
-                        onChange={handleProjectFormChange}
-                        size="small"
-                        fullWidth
-                        InputLabelProps={{ shrink: true }}
-                      />
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            name="currently_working"
-                            checked={projectForm.currently_working}
-                            onChange={handleProjectFormChange}
-                          />
-                        }
-                        label="Currently working"
-                      />
-                    </Box>
-                  </Box>
-
-                  <TextField
-                    label="Project description"
-                    name="description"
-                    value={projectForm.description}
-                    onChange={handleProjectFormChange}
-                    size="small"
-                    fullWidth
-                    multiline
-                    rows={3}
-                    sx={{ mb: 2 }}
-                  />
-
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                    <Button
-                      type="button"
-                      variant="contained"
-                      onClick={handleAddProject}
-                      sx={{ flex: 1 }}
-                    >
-                      Save Project
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outlined"
-                      color="inherit"
-                      onClick={() => setShowProjectForm(false)}
-                      sx={{ flex: 1 }}
-                    >
-                      Cancel
-                    </Button>
-                  </Stack>
-                </Paper>
+                <Button
+                  type="button"
+                  variant="contained"
+                  onClick={handleNext}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    px: 2.2,
+                    background: 'linear-gradient(90deg, #5B4BFF 0%, #6941C6 100%)',
+                    boxShadow: '0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 20px rgba(91, 75, 255, 0.25)',
+                  }}
+                >
+                  Next
+                </Button>
               )}
-            </div>
-          </FormSection>
-
-          {/* Form Actions */}
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={2}
-            sx={{ pt: 3, borderTop: 1, borderColor: 'divider' }}
-          >
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={loading}
-              sx={{ flex: 1 }}
-            >
-              {loading ? 'Adding...' : 'Add Consultant'}
-            </Button>
-            <Button
-              type="button"
-              variant="outlined"
-              color="inherit"
-              onClick={onClose}
-              sx={{ flex: 1 }}
-            >
-              Cancel
-            </Button>
-          </Stack>
+            </Box>
+          </Box>
         </form>
       </DialogContent>
     </Dialog>

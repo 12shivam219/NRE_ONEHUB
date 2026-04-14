@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { Search, X } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { deleteConsultant, getConsultantsPage } from '../../lib/api/consultants';
@@ -15,6 +15,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
+import CircularProgress from '@mui/material/CircularProgress';
 
 type Consultant = Database['public']['Tables']['consultants']['Row'];
 
@@ -30,6 +31,7 @@ export const ConsultantProfiles = memo(() => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedValue, setDebouncedValue] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [filterOwner, setFilterOwner] = useState<'ALL' | 'MINE'>('ALL');
   const [selectedConsultant, setSelectedConsultant] = useState<Consultant | null>(null);
   const [selectedCreatedBy, setSelectedCreatedBy] = useState<string | null>(null);
   const [selectedUpdatedBy, setSelectedUpdatedBy] = useState<string | null>(null);
@@ -38,28 +40,35 @@ export const ConsultantProfiles = memo(() => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [consultantToDelete, setConsultantToDelete] = useState<string | null>(null);
   const itemsPerPage = 20;
+  const currentPageRef = useRef(0);
+  const latestRequestRef = useRef(0);
+  const userId = user?.id;
 
   const handleDebouncedSearch = useMemo(
     () => debounce((value: unknown) => {
       setDebouncedValue(value as string);
-      setCurrentPage(0);
     }, 300),
     []
   );
 
   const loadConsultants = useCallback(async (page: number = 0) => {
-    if (!user) return;
+    if (!userId) return;
+    const requestId = ++latestRequestRef.current;
     try {
       setLoading(true);
       setError(null);
 
+      const normalizedSearch = debouncedValue.trim();
       const result = await getConsultantsPage({
-        userId: user.id,
+        userId: filterOwner === 'MINE' ? userId : undefined,
         limit: itemsPerPage,
         offset: page * itemsPerPage,
-        search: debouncedValue || undefined,
+        search: normalizedSearch || undefined,
         status: filterStatus !== 'ALL' ? filterStatus : undefined,
       });
+
+      // Ignore stale/out-of-order responses from previous queries.
+      if (requestId !== latestRequestRef.current) return;
 
       if (result.success && result.consultants) {
         setConsultants(result.consultants);
@@ -77,20 +86,32 @@ export const ConsultantProfiles = memo(() => {
     } catch {
       setError({ title: 'Error loading consultants', message: 'An unexpected error occurred' });
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestRef.current) {
+        setLoading(false);
+      }
     }
-  }, [user, debouncedValue, filterStatus, itemsPerPage]);
+  }, [userId, debouncedValue, filterStatus, filterOwner, itemsPerPage]);
 
   useEffect(() => {
-    loadConsultants(0);
-  }, [loadConsultants]);
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  useEffect(() => {
+    if (currentPage !== 0) {
+      setCurrentPage(0);
+    }
+  }, [debouncedValue, filterStatus, filterOwner, currentPage]);
+
+  useEffect(() => {
+    loadConsultants(currentPage);
+  }, [loadConsultants, currentPage]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
-    if (user) {
+    if (userId) {
       unsubscribe = subscribeToAllConsultants((update: RealtimeUpdate<Consultant>) => {
         if (update.type === 'INSERT') {
-          loadConsultants(0);
+          loadConsultants(currentPageRef.current);
           showToast({
             type: 'info',
             title: 'New consultant',
@@ -112,7 +133,7 @@ export const ConsultantProfiles = memo(() => {
       });
     }
     return () => { unsubscribe?.(); };
-  }, [user, loadConsultants, showToast]);
+  }, [userId, loadConsultants, showToast]);
 
   const handleDeleteClick = useCallback((id: string) => {
     if (!isAdmin) {
@@ -130,21 +151,19 @@ export const ConsultantProfiles = memo(() => {
   const handleDelete = useCallback(async () => {
     if (!consultantToDelete) return;
     try {
-      const result = await deleteConsultant(consultantToDelete, user?.id);
+      const result = await deleteConsultant(consultantToDelete, userId);
       if (result.success) {
         showToast({ type: 'success', title: 'Consultant deleted', message: 'The consultant has been removed.' });
         setShowDeleteConfirm(false);
         setConsultantToDelete(null);
-        // BUG FIX: Reload from page 0 to avoid out-of-bounds error
-        // If the deleted consultant was the last item on the page, currentPage might be invalid
-        await loadConsultants(0);
+        await loadConsultants(currentPageRef.current);
       } else if (result.error) {
         setError({ title: 'Failed to delete', message: result.error });
       }
     } catch {
       setError({ title: 'Error', message: 'Failed to delete consultant' });
     }
-  }, [consultantToDelete, loadConsultants, showToast, user?.id]);
+  }, [consultantToDelete, loadConsultants, showToast, userId]);
 
 
   const handleViewDetails = (consultant: Consultant) => {
@@ -188,7 +207,9 @@ export const ConsultantProfiles = memo(() => {
     },
   ];
 
-  if (loading) {
+  const isInitialLoading = loading && consultants.length === 0;
+
+  if (isInitialLoading) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Typography variant="h5" sx={{ fontWeight: 800, color: 'var(--text)', fontFamily: 'var(--font-heading)' }}>
@@ -222,6 +243,11 @@ export const ConsultantProfiles = memo(() => {
               <Search className="w-4 h-4" />
             </InputAdornment>
           ),
+          endAdornment: loading ? (
+            <InputAdornment position="end">
+              <CircularProgress size={14} sx={{ color: '#667085' }} />
+            </InputAdornment>
+          ) : undefined,
         }}
         sx={{ flex: 1, '& .MuiOutlinedInput-root': { color: '#0F172A', borderColor: '#E5E7EB', '&:hover': { borderColor: '#D1D5DB' } } }}
       />
@@ -229,13 +255,28 @@ export const ConsultantProfiles = memo(() => {
       <select
         className="px-3 py-2 text-sm border rounded-md bg-[color:var(--darkbg-surface-light)] text-[color:var(--text)] border-gray-300"
         value={filterStatus}
-        onChange={(e) => setFilterStatus(e.target.value)}
+        onChange={(e) => {
+          setFilterStatus(e.target.value);
+          setCurrentPage(0);
+        }}
         aria-label="Filter status"
       >
         <option value="ALL">All Status</option>
         <option value="Active">Active</option>
         <option value="Not Active">Not Active</option>
         <option value="Recently Placed">Recently Placed</option>
+      </select>
+
+      <select
+        className="px-3 py-2 text-sm border rounded-md bg-[color:var(--darkbg-surface-light)] text-[color:var(--text)] border-gray-300"
+        value={filterOwner}
+        onChange={(e) => {
+          setFilterOwner(e.target.value as 'ALL' | 'MINE');
+        }}
+        aria-label="Filter consultant ownership"
+      >
+        <option value="ALL">All Consultants</option>
+        <option value="MINE">My Consultants</option>
       </select>
 
       {searchTerm && (
@@ -295,7 +336,6 @@ export const ConsultantProfiles = memo(() => {
         isFetchingPage={loading}
         onPageChange={(page) => {
           setCurrentPage(page);
-          loadConsultants(page);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         headerSearch={headerSearch}

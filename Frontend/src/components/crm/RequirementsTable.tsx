@@ -533,7 +533,7 @@ export const RequirementsTable = memo(({
   useEffect(() => {
     const loadConsultants = async () => {
       try {
-        const result = await getConsultants(isAdmin ? undefined : user?.id);
+        const result = await getConsultants();
         if (result.success && result.consultants) {
           setConsultants(result.consultants);
         }
@@ -542,7 +542,7 @@ export const RequirementsTable = memo(({
       }
     };
     loadConsultants();
-  }, [isAdmin, user?.id]);
+  }, [user?.id]);
 
   // BUG FIX: Subscribe to real-time interview updates to keep expanded lists fresh
   useEffect(() => {

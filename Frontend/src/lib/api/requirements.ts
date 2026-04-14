@@ -198,6 +198,18 @@ export const getRequirementsPage = async (
     remoteFilter,
   } = options;
 
+  const normalizedOrderBy = orderBy === 'company' ? 'implementation_partner' : orderBy;
+  const safeOrderBy = [
+    'created_at',
+    'updated_at',
+    'title',
+    'status',
+    'rate',
+    'implementation_partner',
+  ].includes(normalizedOrderBy)
+    ? normalizedOrderBy
+    : 'created_at';
+
   try {
     // const cacheKey = JSON.stringify({
     //   userId, limit, offset, search, status, dateFrom, dateTo,
@@ -274,11 +286,11 @@ export const getRequirementsPage = async (
         // Primary fields (most important for relevance)
         const orFilters: string[] = [
           `title.ilike.%${cleaned}%`,
-          `company.ilike.%${cleaned}%`,
+          `implementation_partner.ilike.%${cleaned}%`,
           `primary_tech_stack.ilike.%${cleaned}%`,
           // Secondary fields (additional context)
           `description.ilike.%${cleaned}%`,
-          `end_client.ilike.%${cleaned}%`,
+          `client.ilike.%${cleaned}%`,
           `vendor_company.ilike.%${cleaned}%`,
           `vendor_person_name.ilike.%${cleaned}%`,
           // 📱 For phone searches, search against normalized version (digits only)
@@ -335,7 +347,7 @@ export const getRequirementsPage = async (
     }
 
     // Keyset / cursor pagination: prefer cursor over offset when provided.
-    query = query.order(orderBy, { ascending: orderDir === 'asc' });
+    query = query.order(safeOrderBy, { ascending: orderDir === 'asc' });
 
     if (cursor && cursor.created_at) {
       // Simple keyset using created_at as cursor. For most apps this is sufficient; a tiebreaker on id

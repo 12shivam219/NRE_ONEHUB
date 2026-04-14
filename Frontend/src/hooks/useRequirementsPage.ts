@@ -44,7 +44,11 @@ const buildKey = (q: RequirementsQuery) => {
 };
 
 const fetchPage = async (q: RequirementsQuery): Promise<RequirementsPageData> => {
-  const orderByColumn = q.sortBy === 'date' ? 'created_at' : q.sortBy === 'company' ? 'company' : 'created_at';
+  const orderByColumn = q.sortBy === 'date'
+    ? 'created_at'
+    : q.sortBy === 'company'
+      ? 'implementation_partner'
+      : 'created_at';
 
   const res = await getRequirementsPage({
     // Shared workspace: do not scope by user_id

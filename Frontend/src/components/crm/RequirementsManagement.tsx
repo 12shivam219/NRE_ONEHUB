@@ -650,8 +650,7 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
   };
 
   const handleSortChange = useCallback((field: 'title' | 'company' | 'status' | 'created_at' | 'rate', order: 'asc' | 'desc') => {
-    const serverField = field === 'created_at' ? 'created_at' : field === 'company' ? 'company' : 'created_at';
-    setSortBy(serverField === 'created_at' ? 'date' : serverField === 'company' ? 'company' : 'date');
+    setSortBy(field === 'company' ? 'company' : 'date');
     setSortOrder(order);
     setPage(0);
   }, []);
