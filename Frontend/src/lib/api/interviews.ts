@@ -395,6 +395,23 @@ export const deleteInterview = async (
   userId?: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    // Verify user is admin before allowing deletion
+    if (userId) {
+      const { data: userRecord, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (userError) {
+        return { success: false, error: 'Failed to verify admin status' };
+      }
+
+      if (!userRecord || userRecord.role !== 'admin') {
+        return { success: false, error: 'Only admins can delete interviews' };
+      }
+    }
+
     await logActivity({
       action: 'interview_deleted',
       actorId: userId,

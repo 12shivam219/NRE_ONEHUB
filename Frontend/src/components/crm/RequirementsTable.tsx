@@ -12,6 +12,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Database, RequirementStatus } from '../../lib/database.types';
 import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../contexts/ToastContext';
 import { getInterviewsByRequirementGrouped, deleteInterview } from '../../lib/api/interviews';
 import { getConsultants } from '../../lib/api/consultants';
 import { subscribeToAllInterviews, type RealtimeUpdate } from '../../lib/api/realtimeSync';
@@ -402,6 +403,7 @@ export const RequirementsTable = memo(({
 }: RequirementsTableProps) => {
   // State for table functionality
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [expandedReqs, setExpandedReqs] = useState<Set<string>>(new Set());
   const [reqInterviews, setReqInterviews] = useState<Record<string, Interview[]>>({});
@@ -598,6 +600,11 @@ export const RequirementsTable = memo(({
     try {
       const result = await deleteInterview(interviewId, user?.id);
       if (result.success) {
+        showToast({
+          type: 'success',
+          title: 'Interview deleted',
+          message: 'The interview has been removed.',
+        });
         // Refresh the expanded requirement
         const reqId = Object.keys(reqInterviews).find(key => 
           reqInterviews[key]?.some(i => i.id === interviewId)
@@ -609,9 +616,19 @@ export const RequirementsTable = memo(({
             [reqId]: newInterviews,
           }));
         }
+      } else if (result.error) {
+        showToast({
+          type: 'error',
+          title: 'Failed to delete interview',
+          message: result.error,
+        });
       }
     } catch {
-      // Silently handle interview deletion error
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to delete interview. Please try again.',
+      });
     }
   };
 
@@ -884,6 +901,7 @@ export const RequirementsTable = memo(({
                                     requirementNumber={req.requirement_number ?? undefined}
                                     onViewDetails={handleViewInterview}
                                     onDelete={handleDeleteInterview}
+                                    isAdmin={isAdmin}
                                   />
                                 ) : (
                                   <div style={{

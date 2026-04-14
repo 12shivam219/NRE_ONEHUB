@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
-import { AlertCircle, Mail, Loader, X } from 'lucide-react';
+import { AlertCircle, Mail, Loader, X, Briefcase, Users, FileText, Clock } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../contexts/ToastContext';
 import { useOfflineCache } from '../../hooks/useOfflineCache';
@@ -13,16 +13,24 @@ import { cacheRequirements, type CachedRequirement } from '../../lib/offlineDB';
 import { supabase } from '../../lib/supabase';
 import type { Database } from '../../lib/database.types';
 import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
 import { JDParserDialog } from './JDParserDialog';
 import { BatchJDParserDialog } from './BatchJDParserDialog';
 import type { SelectChangeEvent } from '@mui/material/Select';
+
+// Spinner animation
+const spinnerStyle = `
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .spinner-spin {
+    animation: spin 1s linear infinite;
+  }
+`;
 
 type Consultant = Database['public']['Tables']['consultants']['Row'];
 
@@ -44,9 +52,10 @@ interface FormFieldProps {
   id?: string;
   autoComplete?: string;
   rows?: number;
+  helperText?: string;
 }
 
-// Create FormField component outside the parent component for stability
+// Modern FormField component with clean styling
 const FormField = memo(function FormField({
   label,
   name,
@@ -60,68 +69,82 @@ const FormField = memo(function FormField({
   id,
   autoComplete,
   rows,
+  helperText,
 }: FormFieldProps) {
-  // Generate a unique ID if one isn't provided to ensure accessibility
   const fieldId = id || `field-${name}`;
 
   return (
-    <div>
+    <div style={{ marginBottom: '1.25rem', width: '100%' }}>
+      <label 
+        htmlFor={fieldId}
+        style={{
+          display: 'block',
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: '#1F2937',
+          marginBottom: '0.5rem',
+          letterSpacing: '0.3px',
+        }}
+      >
+        {label}
+        {required && <span style={{ color: '#EF4444', marginLeft: '0.25rem' }}>*</span>}
+      </label>
+      
       {type === 'select' ? (
         <TextField
           select
           id={fieldId}
           name={name}
-          label={label}
           value={value}
           onChange={onChange}
           required={required}
           error={Boolean(error)}
-          helperText={error}
+          helperText={error || helperText}
           size="small"
           fullWidth
-          // MUI handles accessibility automatically when 'id' is provided.
-          // Manually setting htmlFor in InputLabelProps can cause mismatches, especially with Select.
           InputLabelProps={{
-            shrink: true,
-            sx: {
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: '#3A445D',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              '&.Mui-focused': { color: '#4F46E5' },
-            }
+            shrink: false,
+            sx: { display: 'none' }
           }}
           sx={{
-            mb: 1,
             '& .MuiOutlinedInput-root': {
-              borderRadius: '8px',
-              backgroundColor: '#fff',
+              borderRadius: '10px',
+              backgroundColor: '#F9FAFB',
               fontSize: '0.9rem',
+              transition: 'all 0.2s ease',
+              border: '1px solid #E5E7EB',
               '& fieldset': {
-                borderColor: '#D5DAE1',
+                borderColor: '#E5E7EB',
               },
-              '&:hover fieldset': {
-                borderColor: '#C7CEDB',
+              '&:hover': {
+                backgroundColor: '#F3F4F6',
+                '& fieldset': {
+                  borderColor: '#D1D5DB',
+                },
               },
               '&.Mui-focused fieldset': {
                 borderColor: '#4F46E5',
-                boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.08)',
+                boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.1)',
+              },
+              '& .MuiOutlinedInput-input': {
+                padding: '0.75rem',
+                color: '#1F2937',
+                '&::placeholder': {
+                  color: '#9CA3AF',
+                  opacity: 1,
+                },
               },
             },
             '& .MuiFormHelperText-root': {
               fontSize: '0.75rem',
-              mt: 0.5,
-              color: '#ef4444',
-            },
-            '& .MuiOutlinedInput-input::placeholder': {
-              color: '#9CA3B0',
-              opacity: 1,
-              fontSize: '0.9rem',
+              marginTop: '0.375rem',
+              color: error ? '#EF4444' : '#6B7280',
             },
           }}
         >
-          <MenuItem value="">Select {label.toLowerCase()}</MenuItem>
+          <MenuItem value="" disabled>
+            <span style={{ color: '#9CA3AF' }}>Select {label.toLowerCase()}</span>
+          </MenuItem>
           {options?.map((opt: FormFieldOption) => (
             <MenuItem key={opt.value} value={opt.value}>
               {opt.label}
@@ -132,57 +155,55 @@ const FormField = memo(function FormField({
         <TextField
           id={fieldId}
           name={name}
-          label={label}
           type={type === 'textarea' ? 'text' : type}
           value={value}
           onChange={onChange as unknown as (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void}
           placeholder={placeholder}
           required={required}
           error={Boolean(error)}
-          helperText={error}
+          helperText={error || helperText}
           size="small"
           fullWidth
           autoComplete={autoComplete}
           multiline={type === 'textarea'}
-          rows={type === 'textarea' ? (rows ?? 2) : undefined}
-          // Rely on MUI's default label-input association via the 'id' prop
+          rows={type === 'textarea' ? (rows ?? 4) : undefined}
           InputLabelProps={{
-            shrink: true,
-            sx: {
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: '#3A445D',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              '&.Mui-focused': { color: '#4F46E5' },
-            }
+            shrink: false,
+            sx: { display: 'none' }
           }}
           sx={{
-            mb: 1,
             '& .MuiOutlinedInput-root': {
-              borderRadius: '8px',
-              backgroundColor: '#fff',
+              borderRadius: '10px',
+              backgroundColor: '#F9FAFB',
               fontSize: '0.9rem',
+              transition: 'all 0.2s ease',
+              border: '1px solid #E5E7EB',
               '& fieldset': {
-                borderColor: '#D5DAE1',
+                borderColor: '#E5E7EB',
               },
-              '&:hover fieldset': {
-                borderColor: '#C7CEDB',
+              '&:hover': {
+                backgroundColor: '#F3F4F6',
+                '& fieldset': {
+                  borderColor: '#D1D5DB',
+                },
               },
               '&.Mui-focused fieldset': {
                 borderColor: '#4F46E5',
-                boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.08)',
+                boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.1)',
+              },
+              '& .MuiOutlinedInput-input, & .MuiOutlinedInput-inputMultiline': {
+                padding: '0.75rem',
+                color: '#1F2937',
+                '&::placeholder': {
+                  color: '#9CA3AF',
+                  opacity: 1,
+                },
               },
             },
             '& .MuiFormHelperText-root': {
               fontSize: '0.75rem',
-              mt: 0.5,
-              color: '#ef4444',
-            },
-            '& .MuiOutlinedInput-input::placeholder': {
-              color: '#9CA3B0',
-              opacity: 1,
-              fontSize: '0.9rem',
+              marginTop: '0.375rem',
+              color: error ? '#EF4444' : '#6B7280',
             },
           }}
         />
@@ -190,6 +211,72 @@ const FormField = memo(function FormField({
     </div>
   );
 });
+
+/** Modern Section Component for organizing form fields */
+const FormSection = ({ 
+  title, 
+  description, 
+  icon,
+  children 
+}: { 
+  title: string
+  description?: string
+  icon?: React.ReactNode
+  children: React.ReactNode 
+}) => (
+  <div
+    style={{
+      backgroundColor: '#FFFFFF',
+      border: '1px solid #E5E7EB',
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '20px',
+      transition: 'all 0.2s ease',
+    }}
+  >
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '16px' }}>
+      {icon && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '32px',
+          height: '32px',
+          borderRadius: '8px',
+          backgroundColor: '#EEF3FF',
+          color: '#4F46E5',
+          flexShrink: 0,
+        }}>
+          {icon}
+        </div>
+      )}
+      <div style={{ flex: 1 }}>
+        <h3 style={{
+          fontSize: '1rem',
+          fontWeight: 700,
+          color: '#1F2937',
+          margin: '0 0 4px 0',
+          letterSpacing: '0.2px',
+        }}>
+          {title}
+        </h3>
+        {description && (
+          <p style={{
+            fontSize: '0.8125rem',
+            color: '#6B7280',
+            margin: 0,
+            fontWeight: 400,
+          }}>
+            {description}
+          </p>
+        )}
+      </div>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+      {children}
+    </div>
+  </div>
+);
 
 interface CreateRequirementFormProps {
   onClose: () => void;
@@ -210,25 +297,6 @@ interface CreateRequirementFormProps {
     description?: string;
   };
 }
-
-const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section
-    style={{
-      background: 'transparent',
-      border: 'none',
-      borderRadius: '0',
-      padding: '0',
-      marginBottom: '2rem',
-    }}
-  >
-    <h3 style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6B7280', marginBottom: '1.25rem', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-      {title}
-    </h3>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
-      {children}
-    </div>
-  </section>
-);
 
 export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: CreateRequirementFormProps) => {
   const { user } = useAuth();
@@ -594,197 +662,105 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
   };
 
   return (
-    <Dialog 
-      open 
-      onClose={onClose} 
-      fullWidth 
-      maxWidth="sm" 
-      scroll="paper"
-      PaperProps={{
-        sx: {
-          borderRadius: '12px',
-          background: '#FFFFFF',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        },
-      }}
-      slotProps={{
-        backdrop: {
+    <>
+      <style>{spinnerStyle}</style>
+      <Dialog 
+        open 
+        onClose={onClose} 
+        fullWidth 
+        maxWidth="md" 
+        scroll="paper"
+        PaperProps={{
           sx: {
-            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            borderRadius: '16px',
+            background: '#FFFFFF',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.12)',
+            maxHeight: '96vh',
+            display: 'flex',
+            flexDirection: 'column',
           },
-        },
-      }}
-    >
-      <DialogTitle 
-        sx={{ 
-          pr: 7, 
-          fontWeight: 700,
-          fontSize: '1.25rem',
-          fontFamily: '"Poppins", sans-serif',
-          color: '#0B1220',
-          borderBottom: '1px solid #E9EBF0',
-          paddingBottom: '16px',
+        }}
+        slotProps={{
+          backdrop: {
+            sx: {
+              backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            },
+          },
         }}
       >
-        Create New Requirement
+      {/* Header */}
+      <div
+        style={{
+          padding: '32px 32px 24px',
+          borderBottom: '1px solid #E5E7EB',
+          backgroundColor: '#FFFFFF',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div>
+          <h1 style={{
+            margin: '0 0 8px 0',
+            fontSize: '1.5rem',
+            fontWeight: 700,
+            color: '#1F2937',
+            letterSpacing: '-0.02em',
+          }}>
+            Create Requirement
+          </h1>
+          <p style={{
+            margin: 0,
+            fontSize: '0.9rem',
+            color: '#6B7280',
+            fontWeight: 400,
+          }}>
+            Add a new job requirement to your pipeline
+          </p>
+        </div>
         <IconButton 
           onClick={onClose} 
           sx={{ 
-            position: 'absolute', 
-            right: 8, 
-            top: 8,
             color: '#6B7280',
+            width: 40,
+            height: 40,
             '&:hover': {
-              backgroundColor: 'rgba(15, 23, 42, 0.08)',
+              backgroundColor: '#F3F4F6',
+              color: '#374151',
             },
           }} 
           aria-label="Close"
         >
-          <X className="w-5 h-5" />
+          <X size={20} />
         </IconButton>
-      </DialogTitle>
+      </div>
 
+      {/* Content */}
       <DialogContent 
-        dividers 
         sx={{ 
-          backgroundColor: '#FFFFFF',
+          backgroundColor: '#F9FAFB',
           padding: '32px',
           overflowY: 'auto',
+          flex: 1,
           '&::-webkit-scrollbar': {
             width: '8px',
           },
           '&::-webkit-scrollbar-track': {
-            backgroundColor: '#F6F7FB',
+            backgroundColor: '#F3F4F6',
           },
           '&::-webkit-scrollbar-thumb': {
-            backgroundColor: '#D5DAE1',
+            backgroundColor: '#D1D5DB',
             borderRadius: '4px',
             '&:hover': {
-              backgroundColor: '#C7CEDB',
+              backgroundColor: '#9CA3AF',
             },
           },
         }}
       >
         <div style={{ padding: '0' }}>
-          {/* Gmail Jobs Scanner */}
-          {showGmailJobs && gmailJobs.length > 0 ? (
-            <div style={{ marginBottom: '2rem', padding: '1rem', backgroundColor: '#EEF3FF', borderRadius: '8px', border: '1px solid #D5DAE1' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ fontWeight: 600, color: '#4F46E5', margin: 0, fontSize: '0.9rem' }}>Jobs Found in Gmail ({gmailJobs.length})</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowGmailJobs(false)}
-                  style={{ padding: '0.5rem 1rem', backgroundColor: 'transparent', color: '#4F46E5', border: '1px solid #D5DAE1', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500 }}
-                >
-                  Cancel
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {gmailJobs.map((job, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => handleSelectGmailJob(job)}
-                    style={{
-                      padding: '1rem',
-                      backgroundColor: selectedGmailJob === idx ? '#F5F4FF' : '#ffffff',
-                      border: selectedGmailJob === idx ? '2px solid #4F46E5' : '1px solid #E9EBF0',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      transition: 'all 200ms ease',
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, color: '#0B1220', marginBottom: '0.25rem', fontSize: '0.95rem' }}>{job.title}</div>
-                    <div style={{ fontSize: '0.85rem', color: '#6B7280', marginBottom: '0.25rem' }}>{job.company}</div>
-                    {job.skills && <div style={{ fontSize: '0.75rem', color: '#4F46E5', marginBottom: '0.25rem' }}>Skills: {job.skills}</div>}
-                    <div style={{ fontSize: '0.8rem', color: '#6B7280', maxHeight: '60px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {job.description}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div style={{ marginBottom: '2rem' }}>
-              <button
-                type="button"
-                onClick={handleScanGmail}
-                disabled={scanningGmail}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  padding: '0.875rem 1.25rem',
-                  backgroundColor: scanningGmail ? '#F1F3F8' : '#ffffff',
-                  border: '1px solid #D5DAE1',
-                  color: scanningGmail ? '#9CA3B0' : '#3A445D',
-                  borderRadius: '8px',
-                  cursor: scanningGmail ? 'not-allowed' : 'pointer',
-                  fontWeight: 500,
-                  width: '100%',
-                  fontSize: '0.9rem',
-                  transition: 'all 200ms ease',
-                }}
-              >
-                {scanningGmail ? (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin" />
-                    Scanning Gmail...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="w-4 h-4" />
-                    Scan Gmail for Jobs
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-          
-          <div style={{ marginBottom: '2rem' }}>
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="outlined"
-                onClick={() => setShowJDParser(true)}
-                sx={{ 
-                  textTransform: 'none',
-                  borderColor: '#D5DAE1',
-                  color: '#3A445D',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  '&:hover': {
-                    borderColor: '#C7CEDB',
-                    backgroundColor: '#F1F3F8',
-                  }
-                }}
-              >
-                📄 JD Parser
-              </Button>
-
-              <Button
-                variant="outlined"
-                onClick={() => setShowBatchJDParser(true)}
-                sx={{ 
-                  textTransform: 'none',
-                  borderColor: '#D5DAE1',
-                  color: '#3A445D',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  '&:hover': {
-                    borderColor: '#C7CEDB',
-                    backgroundColor: '#F1F3F8',
-                  }
-                }}
-              >
-                📑 Batch JD Parser
-              </Button>
-            </Stack>
-          </div>
-
-          <form onSubmit={handleSubmit}>
-          {/* Submit Error Alert */}
+          {/* Error Alert - Top of form */}
           {submitError && (
-            <div style={{ marginBottom: '2rem' }}>
+            <div style={{ marginBottom: '24px' }}>
               <ErrorAlert
                 title="Failed to Create Requirement"
                 message={submitError}
@@ -796,19 +772,228 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
 
           {/* Similar Requirements Warning */}
           {similarRequirements.length > 0 && (
-            <div style={{ backgroundColor: '#FEF3C7', border: '1px solid #FBCA04', borderRadius: '8px', padding: '1rem', marginBottom: '2rem', display: 'flex', gap: '0.75rem' }}>
-              <AlertCircle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" style={{ marginTop: '2px' }} />
-              <div style={{ fontSize: '0.85rem' }}>
-                <p style={{ fontWeight: 600, color: '#92400E', marginBottom: '0.25rem' }}>Similar requirements found</p>
-                <p style={{ color: '#92400E' }}>
+            <div style={{ 
+              backgroundColor: '#FFFBEB', 
+              border: '1px solid #FCD34D', 
+              borderRadius: '12px', 
+              padding: '16px', 
+              marginBottom: '24px',
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'flex-start'
+            }}>
+              <AlertCircle size={20} style={{ color: '#B45309', flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <p style={{ fontWeight: 600, color: '#92400E', margin: '0 0 4px 0', fontSize: '0.9rem' }}>
+                  Similar requirements found
+                </p>
+                <p style={{ color: '#92400E', margin: 0, fontSize: '0.85rem' }}>
                   {similarRequirements.length} similar requirement(s) exist. Review before creating.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Core Details */}
-          <FormSection title="Core Details">
+          {/* Gmail Jobs Scanner - As Card */}
+          {showGmailJobs && gmailJobs.length > 0 ? (
+            <div style={{ 
+              backgroundColor: '#F0F9FF', 
+              border: '1px solid #BAE6FD', 
+              borderRadius: '12px', 
+              padding: '20px', 
+              marginBottom: '24px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontWeight: 700, color: '#0369A1', margin: 0, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Mail size={18} />
+                  Jobs Found in Gmail ({gmailJobs.length})
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowGmailJobs(false)}
+                  style={{ 
+                    padding: '6px 12px', 
+                    backgroundColor: 'transparent', 
+                    color: '#0369A1', 
+                    border: '1px solid #BAE6FD', 
+                    borderRadius: '8px', 
+                    cursor: 'pointer', 
+                    fontSize: '0.85rem', 
+                    fontWeight: 500,
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#EFF6FF';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {gmailJobs.map((job, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => handleSelectGmailJob(job)}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: selectedGmailJob === idx ? '#F5F4FF' : '#ffffff',
+                      border: selectedGmailJob === idx ? '2px solid #0369A1' : '1px solid #E0F2FE',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedGmailJob !== idx) {
+                        e.currentTarget.style.backgroundColor = '#F0F9FF';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedGmailJob !== idx) {
+                        e.currentTarget.style.backgroundColor = '#ffffff';
+                      }
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, color: '#1F2937', marginBottom: '4px', fontSize: '0.95rem' }}>{job.title}</div>
+                    <div style={{ fontSize: '0.85rem', color: '#6B7280', marginBottom: '4px' }}>{job.company}</div>
+                    {job.skills && <div style={{ fontSize: '0.75rem', color: '#0369A1', marginBottom: '4px' }}>Skills: {job.skills}</div>}
+                    <div style={{ fontSize: '0.8rem', color: '#6B7280', maxHeight: '60px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {job.description}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: '24px' }}>
+              <button
+                type="button"
+                onClick={handleScanGmail}
+                disabled={scanningGmail}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '12px 16px',
+                  backgroundColor: scanningGmail ? '#F3F4F6' : '#ffffff',
+                  border: '1px solid #E5E7EB',
+                  color: scanningGmail ? '#9CA3AF' : '#4F46E5',
+                  borderRadius: '10px',
+                  cursor: scanningGmail ? 'not-allowed' : 'pointer',
+                  fontWeight: 500,
+                  width: '100%',
+                  fontSize: '0.9rem',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => !scanningGmail && (
+                  e.currentTarget.style.backgroundColor = '#F9FAFB',
+                  e.currentTarget.style.borderColor = '#D1D5DB'
+                )}
+                onMouseLeave={(e) => !scanningGmail && (
+                  e.currentTarget.style.backgroundColor = '#ffffff',
+                  e.currentTarget.style.borderColor = '#E5E7EB'
+                )}
+              >
+                {scanningGmail ? (
+                  <>
+                    <Loader size={16} className="spinner-spin" />
+                    <span>Scanning Gmail...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail size={16} />
+                    <span>Scan Gmail for Jobs</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Parser Buttons - Modern Card Style */}
+          <div style={{ 
+            backgroundColor: '#FFFFFF', 
+            border: '1px solid #E5E7EB', 
+            borderRadius: '12px', 
+            padding: '20px', 
+            marginBottom: '24px'
+          }}>
+            <p style={{ margin: '0 0 12px 0', fontSize: '0.875rem', fontWeight: 600, color: '#6B7280' }}>
+              Quick Import
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setShowJDParser(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#F3F4F6',
+                  border: '1px solid #D1D5DB',
+                  color: '#4F46E5',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: '0.85rem',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#E9EBF0';
+                  e.currentTarget.style.borderColor = '#C7CEDB';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#F3F4F6';
+                  e.currentTarget.style.borderColor = '#D1D5DB';
+                }}
+              >
+                <FileText size={16} />
+                <span>Parse JD</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBatchJDParser(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#F3F4F6',
+                  border: '1px solid #D1D5DB',
+                  color: '#4F46E5',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: '0.85rem',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#E9EBF0';
+                  e.currentTarget.style.borderColor = '#C7CEDB';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#F3F4F6';
+                  e.currentTarget.style.borderColor = '#D1D5DB';
+                }}
+              >
+                <FileText size={16} />
+                <span>Batch Parse</span>
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            {/* Core Details Section */}
+          <FormSection 
+            title="Core Details" 
+            description="Job title, partner, and client information"
+            icon={<Briefcase size={18} />}
+          >
             <FormField
               label="Job Title"
               name="title"
@@ -858,28 +1043,45 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
                 { label: 'Closed', value: 'CLOSED' },
               ]}
             />
-            <FormField
-              label="Assigned Consultant"
-              name="consultant_id"
-              id="req-consultant"
-              type="select"
-              value={formData.consultant_id}
-              onChange={handleChange}
-              options={consultantOptions}
-            />
-            <FormField
-              label="Next Action"
-              name="next_step"
-              id="req-next-step"
-              autoComplete="off"
-              placeholder="e.g., Send profile, Schedule interview"
-              value={formData.next_step}
-              onChange={handleChange}
-            />
+            <div style={{ gridColumn: '1 / -1' }}>
+              <FormField
+                label="Assigned Consultant"
+                name="consultant_id"
+                id="req-consultant"
+                type="select"
+                value={formData.consultant_id}
+                onChange={handleChange}
+                options={consultantOptions}
+              />
+            </div>
           </FormSection>
 
-          {/* Work Details */}
-          <FormSection title="Work Details">
+          {/* Assignment & Actions Section */}
+          <FormSection 
+            title="Assignment & Actions" 
+            description="Next steps and workflow tracking"
+            icon={<Clock size={18} />}
+          >
+            <div style={{ gridColumn: '1 / -1' }}>
+              <FormField
+                label="Next Action"
+                name="next_step"
+                id="req-next-step"
+                autoComplete="off"
+                placeholder="e.g., Send profile, Schedule interview"
+                value={formData.next_step}
+                onChange={handleChange}
+                helperText="Brief description of the next step"
+              />
+            </div>
+          </FormSection>
+
+          {/* Work Details Section */}
+          <FormSection 
+            title="Work Details" 
+            description="Skills, compensation, and engagement terms"
+            icon={<Briefcase size={18} />}
+          >
             <FormField
               label="Key Skills"
               name="primary_tech_stack"
@@ -888,16 +1090,18 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
               placeholder="e.g., Java, Spring Boot, AWS"
               value={formData.primary_tech_stack}
               onChange={handleChange}
+              helperText="Comma-separated list of required skills"
             />
             <FormField
               label="Rate / Salary"
               name="rate"
               id="req-rate"
               autoComplete="off"
-              placeholder="Any format: $80k, $80,000-$120,000, 80k-120k, £50-70k, $80k/year, etc."
+              placeholder="$80k, $80k-$120k, £50-70k, etc."
               value={formData.rate}
               onChange={handleChange}
               error={formErrors.rate}
+              helperText="Any format: hourly, annual, or range"
             />
             <FormField
               label="Work Type"
@@ -919,8 +1123,12 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
             />
           </FormSection>
 
-          {/* Vendor Information */}
-          <FormSection title="Vendor">
+          {/* Vendor Information Section */}
+          <FormSection 
+            title="Vendor Information" 
+            description="Staffing partner details and contact"
+            icon={<Users size={18} />}
+          >
             <FormField
               label="Vendor Company"
               name="vendor_company"
@@ -942,7 +1150,7 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
               error={formErrors.vendor_website}
             />
             <FormField
-              label="Vendor Contact"
+              label="Contact Person"
               name="vendor_person_name"
               id="req-vendor-contact"
               autoComplete="name"
@@ -951,7 +1159,7 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
               onChange={handleChange}
             />
             <FormField
-              label="Vendor Phone"
+              label="Phone"
               name="vendor_phone"
               id="req-vendor-phone"
               autoComplete="tel"
@@ -961,7 +1169,7 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
               onChange={handleChange}
             />
             <FormField
-              label="Vendor Email"
+              label="Email"
               name="vendor_email"
               id="req-vendor-email"
               autoComplete="email"
@@ -973,8 +1181,12 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
             />
           </FormSection>
 
-          {/* Description */}
-          <FormSection title="Description">
+          {/* Description Section */}
+          <FormSection 
+            title="Description" 
+            description="Full job description and key responsibilities"
+            icon={<FileText size={18} />}
+          >
             <div style={{ gridColumn: '1 / -1' }}>
               <FormField
                 label="Role Description"
@@ -982,76 +1194,95 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
                 id="req-description"
                 type="textarea"
                 autoComplete="off"
-                placeholder="Full job description and key responsibilities..."
+                placeholder="Full job description, key responsibilities, and any other relevant details..."
                 value={formData.description}
                 onChange={handleChange}
-                rows={8}
+                rows={6}
               />
             </div>
           </FormSection>
 
-          {/* Form Actions */}
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '2rem', paddingTop: '2rem', borderTop: '1px solid #E9EBF0' }}>
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                backgroundColor: '#F1F3F8',
-                color: '#3A445D',
-                border: '1px solid #D5DAE1',
-                padding: '0.75rem 1.5rem',
-                borderRadius: '8px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#E9EBF0';
-                e.currentTarget.style.borderColor = '#C7CEDB';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#F1F3F8';
-                e.currentTarget.style.borderColor = '#D5DAE1';
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                backgroundColor: loading ? '#8B7EEF' : '#4F46E5',
-                color: '#FFFFFF',
-                border: 'none',
-                padding: '0.75rem 1.5rem',
-                borderRadius: '8px',
-                fontWeight: 600,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontSize: '0.9rem',
-                transition: 'all 0.2s ease',
-                opacity: loading ? 0.85 : 1,
-                boxShadow: loading ? 'none' : '0 1px 3px rgba(79, 70, 229, 0.3)',
-              }}
-              onMouseEnter={(e) => !loading && (
-                e.currentTarget.style.backgroundColor = '#4338CA',
-                e.currentTarget.style.boxShadow = '0 4px 6px rgba(79, 70, 229, 0.4)'
-              )}
-              onMouseLeave={(e) => !loading && (
-                e.currentTarget.style.backgroundColor = '#4F46E5',
-                e.currentTarget.style.boxShadow = '0 1px 3px rgba(79, 70, 229, 0.3)'
-              )}
-            >
-              {loading ? 'Creating...' : 'Create'}
-            </button>
-          </div>
-        </form>
+          </form>
         </div>
+      </DialogContent>
 
-        <JDParserDialog
-          open={showJDParser}
-          onClose={() => setShowJDParser(false)}
-          onParsedData={(extraction, cleanedText) => {
+      {/* Sticky Footer with Actions */}
+      <div
+        style={{
+          padding: '20px 32px',
+          borderTop: '1px solid #E5E7EB',
+          backgroundColor: '#FFFFFF',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '12px',
+          alignItems: 'center',
+          borderRadius: '0 0 16px 16px',
+        }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            backgroundColor: '#F3F4F6',
+            color: '#374151',
+            border: '1px solid #D1D5DB',
+            padding: '10px 20px',
+            borderRadius: '10px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#E5E7EB';
+            e.currentTarget.style.borderColor = '#B4B4B8';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#F3F4F6';
+            e.currentTarget.style.borderColor = '#D1D5DB';
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            backgroundColor: loading ? '#8B7EEF' : '#4F46E5',
+            color: '#FFFFFF',
+            border: 'none',
+            padding: '10px 24px',
+            borderRadius: '10px',
+            fontWeight: 600,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s ease',
+            opacity: loading ? 0.7 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: !loading ? '0 1px 3px rgba(79, 70, 229, 0.3)' : 'none',
+          }}
+          onMouseEnter={(e) => !loading && (
+            e.currentTarget.style.backgroundColor = '#4338CA',
+            e.currentTarget.style.boxShadow = '0 4px 6px rgba(79, 70, 229, 0.4)'
+          )}
+          onMouseLeave={(e) => !loading && (
+            e.currentTarget.style.backgroundColor = '#4F46E5',
+            e.currentTarget.style.boxShadow = '0 1px 3px rgba(79, 70, 229, 0.3)'
+          )}
+          onClick={handleSubmit}
+        >
+          {loading && <Loader size={16} className="spinner-spin" />}
+          {loading ? 'Creating...' : 'Create Requirement'}
+        </button>
+      </div>
+
+      {/* Parser Dialogs */}
+      <JDParserDialog
+        open={showJDParser}
+        onClose={() => setShowJDParser(false)}
+        onParsedData={(extraction, cleanedText) => {
             setFormData(prev => ({
               ...prev,
               title: extraction.jobTitle ?? prev.title,
@@ -1091,8 +1322,7 @@ export const CreateRequirementForm = ({ onClose, onSuccess, initialData }: Creat
             setShowBatchJDParser(false);
           }}
         />
-
-      </DialogContent>
     </Dialog>
+    </>
   );
 };

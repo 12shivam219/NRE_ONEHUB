@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { mutate as globalMutate } from 'swr';
-import { X, Calendar, Clock, Users, Briefcase, MessageSquare } from 'lucide-react';
+import { X, Calendar, Clock, Users, Briefcase, MessageSquare, MapPin, FileText } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../contexts/ToastContext';
 import { createInterview, getInterviewsByRequirementGrouped } from '../../lib/api/interviews';
@@ -37,6 +37,7 @@ interface FormFieldProps {
   options?: FormFieldOption[];
   error?: string;
   helperText?: string;
+  icon?: React.ReactNode;
 }
 
 // Modern FormField component with clean styling
@@ -52,18 +53,21 @@ const FormField = memo(function FormField({
   options,
   error,
   helperText,
+  icon,
 }: FormFieldProps) {
+  const [isFocused, setIsFocused] = useState(false);
+
   return (
-    <div style={{ marginBottom: '0', width: '100%' }}>
+    <div style={{ marginBottom: '20px', width: '100%' }}>
       <label
         htmlFor={name}
         style={{
           display: 'block',
-          fontSize: '0.8rem',
-          fontWeight: 500,
-          color: '#374151',
-          marginBottom: '8px',
-          letterSpacing: '0.2px',
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: '#1F2937',
+          marginBottom: '6px',
+          letterSpacing: '0.3px',
         }}
       >
         {label}
@@ -87,23 +91,20 @@ const FormField = memo(function FormField({
           InputLabelProps={{ shrink: false, sx: { display: 'none' } }}
           sx={{
             '& .MuiOutlinedInput-root': {
-              borderRadius: '8px',
-              backgroundColor: '#FFFFFF',
+              borderRadius: '10px',
+              backgroundColor: '#F9FAFB',
               fontSize: '0.9rem',
-              transition: 'all 0.15s ease',
-              border: '1px solid #D1D5DB',
-              '& fieldset': { borderColor: '#D1D5DB' },
-              '&:hover fieldset': { borderColor: '#9CA3AF' },
-              '&.Mui-focused': {
-                boxShadow: '0 0 0 1px #4F46E5, 0 0 0 3px rgba(79, 70, 229, 0.1)',
-              },
+              transition: 'all 0.2s ease',
+              border: '1px solid #E5E7EB',
+              '& fieldset': { borderColor: '#E5E7EB' },
+              '&:hover fieldset': { borderColor: '#D1D5DB' },
               '&.Mui-focused fieldset': {
-                borderColor: '#4F46E5 !important',
+                borderColor: '#4F46E5',
+                boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.1)',
               },
               '& .MuiOutlinedInput-input': {
-                padding: '11px 13px',
+                padding: '10px 12px',
                 color: '#1F2937',
-                fontWeight: 500,
               },
             },
             '& .MuiMenuItem-root': { fontSize: '0.9rem' },
@@ -134,26 +135,25 @@ const FormField = memo(function FormField({
           variant="outlined"
           multiline={type === 'textarea'}
           rows={type === 'textarea' ? 4 : undefined}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           InputLabelProps={{ shrink: false, sx: { display: 'none' } }}
           sx={{
             '& .MuiOutlinedInput-root': {
-              borderRadius: '8px',
-              backgroundColor: '#FFFFFF',
+              borderRadius: '10px',
+              backgroundColor: '#F9FAFB',
               fontSize: '0.9rem',
-              transition: 'all 0.15s ease',
-              border: '1px solid #D1D5DB',
-              '& fieldset': { borderColor: '#D1D5DB' },
-              '&:hover fieldset': { borderColor: '#9CA3AF' },
-              '&.Mui-focused': {
-                boxShadow: '0 0 0 1px #4F46E5, 0 0 0 3px rgba(79, 70, 229, 0.1)',
-              },
+              transition: 'all 0.2s ease',
+              border: '1px solid #E5E7EB',
+              '& fieldset': { borderColor: '#E5E7EB' },
+              '&:hover fieldset': { borderColor: '#D1D5DB' },
               '&.Mui-focused fieldset': {
-                borderColor: '#4F46E5 !important',
+                borderColor: '#4F46E5',
+                boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.1)',
               },
               '& .MuiOutlinedInput-input, & .MuiOutlinedInput-inputMultiline': {
-                padding: '11px 13px',
+                padding: '10px 12px',
                 color: '#1F2937',
-                fontWeight: 500,
                 '&::placeholder': {
                   color: '#9CA3AF',
                   opacity: 1,
@@ -168,12 +168,11 @@ const FormField = memo(function FormField({
         <div
           style={{
             fontSize: '0.75rem',
-            color: '#DC2626',
-            marginTop: '6px',
+            color: '#EF4444',
+            marginTop: '4px',
             display: 'flex',
             alignItems: 'center',
             gap: '4px',
-            fontWeight: 500,
           }}
         >
           {error}
@@ -181,7 +180,7 @@ const FormField = memo(function FormField({
       )}
 
       {helperText && !error && (
-        <div style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '6px', fontWeight: 400 }}>
+        <div style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '4px' }}>
           {helperText}
         </div>
       )}
@@ -212,19 +211,17 @@ const FormSection = ({
     style={{
       backgroundColor: '#FFFFFF',
       border: '1px solid #E5E7EB',
-      borderRadius: '10px',
-      padding: '28px',
-      marginBottom: '28px',
-      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
-      transition: 'all 0.2s ease',
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '20px',
     }}
   >
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '20px' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '16px' }}>
       {icon && (
         <div
           style={{
-            width: '36px',
-            height: '36px',
+            width: '32px',
+            height: '32px',
             borderRadius: '8px',
             backgroundColor: '#EEF3FF',
             color: '#4F46E5',
@@ -232,20 +229,19 @@ const FormSection = ({
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            fontSize: '18px',
           }}
         >
           {icon}
         </div>
       )}
-      <div style={{ flex: 1 }}>
+      <div>
         <h3
           style={{
-            margin: '0 0 6px 0',
-            fontSize: '1.0625rem',
+            margin: '0 0 4px 0',
+            fontSize: '1rem',
             fontWeight: 700,
             color: '#1F2937',
-            letterSpacing: '-0.01em',
+            letterSpacing: '0.2px',
           }}
         >
           {title}
@@ -257,7 +253,6 @@ const FormSection = ({
               fontSize: '0.8125rem',
               color: '#6B7280',
               fontWeight: 400,
-              lineHeight: '1.4',
             }}
           >
             {description}
@@ -265,7 +260,7 @@ const FormSection = ({
         )}
       </div>
     </div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
       {children}
     </div>
   </div>
@@ -289,8 +284,6 @@ export const CreateInterviewForm = ({
     { label: '3rd Round', value: '3rd Round' },
     { label: 'Final Round', value: 'Final Round' },
   ]);
-  const initializedFromPropRef = useRef(false);
-  const lastRequirementIdRef = useRef('');
 
   const [formData, setFormData] = useState({
     requirement_id: '',
@@ -353,26 +346,23 @@ export const CreateInterviewForm = ({
 
   // Auto-populate requirement if passed as prop
   useEffect(() => {
-    if (requirementId && requirements.length > 0 && !initializedFromPropRef.current) {
+    if (requirementId && requirements.length > 0) {
       const requirementExists = requirements.some((r) => r.id === requirementId);
-      if (requirementExists && formData.requirement_id !== requirementId) {
+      if (requirementExists) {
         setFormData((prev) => ({ ...prev, requirement_id: requirementId }));
-        initializedFromPropRef.current = true;
-        lastRequirementIdRef.current = requirementId;
       }
     }
-  }, [requirementId, requirements, formData.requirement_id]);
+  }, [requirementId, requirements]);
 
   // Validate requirement exists
   useEffect(() => {
     if (formData.requirement_id && requirements.length > 0) {
       const requirementExists = requirements.some((r) => r.id === formData.requirement_id);
-      if (!requirementExists && lastRequirementIdRef.current !== formData.requirement_id) {
+      if (!requirementExists) {
         setFormData((prev) => ({ ...prev, requirement_id: '' }));
-        lastRequirementIdRef.current = '';
       }
     }
-  }, [requirements, formData.requirement_id]);
+  }, [requirements]);
 
   // Auto-populate fields from requirement
   useEffect(() => {
@@ -446,12 +436,9 @@ export const CreateInterviewForm = ({
       const requirement = requirements.find((r) => r.id === formData.requirement_id);
       if (requirement) {
         const generatedSubject = `${requirement.title} - ${formData.type} - ${formData.round}`;
-        if (generatedSubject !== formData.subject_line) {
-          setFormData((prev) => ({ ...prev, subject_line: generatedSubject }));
-        }
+        setFormData((prev) => ({ ...prev, subject_line: generatedSubject }));
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.requirement_id, formData.round, formData.type, requirements]);
 
   const requirementOptions = useMemo(
@@ -599,7 +586,7 @@ export const CreateInterviewForm = ({
   };
 
   const formContent = (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Core Details Section */}
       <FormSection
         title="Schedule Details"
@@ -892,7 +879,7 @@ export const CreateInterviewForm = ({
       {/* Header */}
       <div
         style={{
-          padding: '40px 40px 32px',
+          padding: '32px 32px 24px',
           borderBottom: '1px solid #E5E7EB',
           backgroundColor: '#FFFFFF',
           display: 'flex',
@@ -900,15 +887,14 @@ export const CreateInterviewForm = ({
           justifyContent: 'space-between',
         }}
       >
-        <div style={{ flex: 1 }}>
+        <div>
           <h1
             style={{
-              margin: '0 0 12px 0',
-              fontSize: '1.875rem',
+              margin: '0 0 8px 0',
+              fontSize: '1.5rem',
               fontWeight: 700,
               color: '#1F2937',
               letterSpacing: '-0.02em',
-              lineHeight: '1.2',
             }}
           >
             Schedule Interview
@@ -916,13 +902,12 @@ export const CreateInterviewForm = ({
           <p
             style={{
               margin: 0,
-              fontSize: '0.95rem',
+              fontSize: '0.9rem',
               color: '#6B7280',
               fontWeight: 400,
-              lineHeight: '1.5',
             }}
           >
-            Complete the form below to schedule a new interview
+            Create a new interview for the candidate
           </p>
         </div>
         <IconButton
@@ -945,15 +930,15 @@ export const CreateInterviewForm = ({
       {/* Content */}
       <DialogContent
         sx={{
-          backgroundColor: '#FFFFFF',
-          padding: '40px',
+          backgroundColor: '#F9FAFB',
+          padding: '32px',
           overflowY: 'auto',
           flex: 1,
           '&::-webkit-scrollbar': {
             width: '8px',
           },
           '&::-webkit-scrollbar-track': {
-            backgroundColor: '#F9FAFB',
+            backgroundColor: '#F3F4F6',
           },
           '&::-webkit-scrollbar-thumb': {
             backgroundColor: '#D1D5DB',
@@ -970,7 +955,7 @@ export const CreateInterviewForm = ({
       {/* Sticky Footer */}
       <div
         style={{
-          padding: '24px 40px',
+          padding: '20px 32px',
           borderTop: '1px solid #E5E7EB',
           backgroundColor: '#FFFFFF',
           display: 'flex',
@@ -983,22 +968,22 @@ export const CreateInterviewForm = ({
           type="button"
           onClick={onClose}
           style={{
-            backgroundColor: '#FFFFFF',
+            backgroundColor: '#F3F4F6',
             color: '#374151',
             border: '1px solid #D1D5DB',
-            padding: '10px 24px',
-            borderRadius: '8px',
+            padding: '10px 20px',
+            borderRadius: '10px',
             fontWeight: 600,
             cursor: 'pointer',
-            fontSize: '0.9375rem',
-            transition: 'all 0.15s ease',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s ease',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#F9FAFB';
+            e.currentTarget.style.backgroundColor = '#E5E7EB';
             e.currentTarget.style.borderColor = '#9CA3AF';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#FFFFFF';
+            e.currentTarget.style.backgroundColor = '#F3F4F6';
             e.currentTarget.style.borderColor = '#D1D5DB';
           }}
         >
@@ -1012,31 +997,31 @@ export const CreateInterviewForm = ({
             if (form) form.dispatchEvent(new Event('submit', { bubbles: true }));
           }}
           style={{
-            backgroundColor: loading ? '#818CF8' : '#4F46E5',
+            backgroundColor: loading ? '#8B7EEF' : '#4F46E5',
             color: '#FFFFFF',
             border: 'none',
-            padding: '10px 28px',
-            borderRadius: '8px',
+            padding: '10px 24px',
+            borderRadius: '10px',
             fontWeight: 600,
             cursor: loading ? 'not-allowed' : 'pointer',
-            fontSize: '0.9375rem',
-            transition: 'all 0.15s ease',
-            opacity: loading ? 0.8 : 1,
+            fontSize: '0.9rem',
+            transition: 'all 0.2s ease',
+            opacity: loading ? 0.7 : 1,
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            boxShadow: !loading ? '0 2px 4px rgba(79, 70, 229, 0.2)' : 'none',
+            boxShadow: !loading ? '0 1px 3px rgba(79, 70, 229, 0.3)' : 'none',
           }}
           onMouseEnter={(e) =>
             !loading && (
               (e.currentTarget.style.backgroundColor = '#4338CA'),
-              (e.currentTarget.style.boxShadow = '0 4px 12px rgba(79, 70, 229, 0.3)')
+              (e.currentTarget.style.boxShadow = '0 4px 6px rgba(79, 70, 229, 0.4)')
             )
           }
           onMouseLeave={(e) =>
             !loading && (
               (e.currentTarget.style.backgroundColor = '#4F46E5'),
-              (e.currentTarget.style.boxShadow = '0 2px 4px rgba(79, 70, 229, 0.2)')
+              (e.currentTarget.style.boxShadow = '0 1px 3px rgba(79, 70, 229, 0.3)')
             )
           }
         >

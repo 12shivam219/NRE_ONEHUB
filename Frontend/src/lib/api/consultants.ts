@@ -121,6 +121,7 @@ export const getConsultantsPage = async (options: {
   status?: string;
 }): Promise<{ success: boolean; consultants?: ConsultantWithLogs[]; total?: number; error?: string }> => {
   const {
+    userId,
     limit = 20,
     offset = 0,
     search,
@@ -132,6 +133,11 @@ export const getConsultantsPage = async (options: {
       .from('consultants')
       .select('*', { count: 'exact' })
       .order('updated_at', { ascending: false });
+
+    // Filter by user
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
 
     // Server-side filtering
     if (status && status !== 'ALL') {

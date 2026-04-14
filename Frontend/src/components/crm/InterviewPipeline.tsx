@@ -10,6 +10,7 @@ interface InterviewPipelineProps {
   requirementNumber?: number;
   onViewDetails: (interview: Interview) => void;
   onDelete: (interviewId: string) => void;
+  isAdmin?: boolean;
 }
 
 // Helper function to get status pill colors
@@ -50,6 +51,7 @@ export const InterviewPipeline = memo(({
   requirementNumber,
   onViewDetails,
   onDelete,
+  isAdmin = false,
 }: InterviewPipelineProps) => {
   return (
     <div
@@ -317,45 +319,47 @@ export const InterviewPipeline = memo(({
                     </div>
                   </div>
 
-                  {/* Delete Icon - Subtle & Professional */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(interview.id);
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '24px',
-                      height: '24px',
-                      padding: 0,
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      color: '#CBD5E1',
-                      transition: 'all 0.15s ease',
-                      fontSize: '14px',
-                      flexShrink: 0,
-                      opacity: 0.6,
-                    }}
-                    onMouseEnter={(e) => {
-                      const btn = e.currentTarget as HTMLButtonElement;
-                      btn.style.backgroundColor = '#FECACA';
-                      btn.style.color = '#DC2626';
-                      btn.style.opacity = '1';
-                    }}
-                    onMouseLeave={(e) => {
-                      const btn = e.currentTarget as HTMLButtonElement;
-                      btn.style.backgroundColor = 'transparent';
-                      btn.style.color = '#CBD5E1';
-                      btn.style.opacity = '0.6';
-                    }}
-                    title="Delete interview"
-                  >
-                    ✕
-                  </button>
+                  {/* Delete Icon - Admins Only */}
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(interview.id);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '24px',
+                        height: '24px',
+                        padding: 0,
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        color: '#CBD5E1',
+                        transition: 'all 0.15s ease',
+                        fontSize: '14px',
+                        flexShrink: 0,
+                        opacity: 0.6,
+                      }}
+                      onMouseEnter={(e) => {
+                        const btn = e.currentTarget as HTMLButtonElement;
+                        btn.style.backgroundColor = '#FECACA';
+                        btn.style.color = '#DC2626';
+                        btn.style.opacity = '1';
+                      }}
+                      onMouseLeave={(e) => {
+                        const btn = e.currentTarget as HTMLButtonElement;
+                        btn.style.backgroundColor = 'transparent';
+                        btn.style.color = '#CBD5E1';
+                        btn.style.opacity = '0.6';
+                      }}
+                      title="Delete interview"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
