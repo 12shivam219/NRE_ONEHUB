@@ -2,6 +2,7 @@ import { supabase } from '../supabase';
 import type { Database } from '../database.types';
 import { logger, handleApiError, retryAsync } from '../errorHandler';
 import { sanitizePathComponent, isSafeStoragePath } from '../utils';
+import { logActivity } from './audit';
 
 type Document = Database['public']['Tables']['documents']['Row'];
 
@@ -98,8 +99,9 @@ const createDocumentCopy = async (
 
   const copyName = document.original_filename || document.filename || 'document.docx';
   const { data: copiedDocument, error: insertError } = await retryAsync(
-    async () =>
-      supabase
+    async () => {
+      console.log('📝 [createDocumentCopy] Inserting document record:', { folderId, documentName: copyName, storagePath: copyStoragePath });
+      return supabase
         .from('documents')
         .insert({
           user_id: userId,
@@ -115,7 +117,8 @@ const createDocumentCopy = async (
           google_drive_id: null,
         })
         .select()
-        .single(),
+        .single();
+    },
     {
       maxAttempts: 2,
       initialDelayMs: 100,
@@ -141,8 +144,15 @@ const createDocumentCopy = async (
       });
     }
 
+    console.error('❌ [createDocumentCopy] Database insert failed:', { error: insertError.message, folderId });
     return { success: false, error: appError.message };
   }
+
+  console.log('✅ [createDocumentCopy] Document successfully created:', { 
+    documentId: copiedDocument?.id, 
+    folderId: copiedDocument?.folder_id,
+    fileName: copiedDocument?.original_filename 
+  });
 
   return { success: true, document: copiedDocument };
 };
@@ -158,6 +168,31 @@ export const uploadDocument = async (
   folderId?: string | null
 ): Promise<{ success: boolean; document?: Document; error?: string }> => {
   try {
+    // Check storage quota before uploading
+    const quotaCheckResponse = await fetch('/api/check-storage-quota', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ file_size_bytes: file.size }),
+    });
+
+    if (quotaCheckResponse.ok) {
+      const quotaData = await quotaCheckResponse.json();
+      if (!quotaData.allowed) {
+        return {
+          success: false,
+          error: quotaData.error || 'Storage quota exceeded. Please upgrade your plan.',
+        };
+      }
+    } else {
+      logger.warn('Failed to check quota, proceeding with upload at risk', {
+        component: 'uploadDocument',
+        resource: file.name,
+      });
+    }
+
     const sanitizedFilename = sanitizePathComponent(file.name);
     const sanitizedUserId = sanitizePathComponent(userId);
     const storagePath = `${sanitizedUserId}/${Date.now()}_${sanitizedFilename}`;
@@ -220,8 +255,39 @@ export const uploadDocument = async (
         action: 'db_insert',
         resource: file.name,
       });
+
+      // Cleanup uploaded storage object when metadata insert fails to avoid orphaned files.
+      try {
+        if (isSafeStoragePath(storagePath)) {
+          await supabase.storage.from('documents').remove([storagePath]);
+        }
+      } catch (cleanupError) {
+        logger.warn('Failed to clean up uploaded file after DB insert failure', {
+          component: 'uploadDocument',
+          resource: file.name,
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        });
+      }
+
       return { success: false, error: appError.message };
     }
+
+    // Audit log document upload
+    await logActivity({
+      action: 'document_uploaded',
+      actorId: userId,
+      resourceType: 'document',
+      resourceId: document.id,
+      description: `Uploaded document "${file.name}" (${(file.size / 1024 / 1024).toFixed(2)}MB)`,
+      details: {
+        filename: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+        source,
+      },
+    }).catch(() => {
+      // Log failure silently - don't block operation
+    });
 
     logger.info('Document uploaded successfully', {
       component: 'uploadDocument',
@@ -350,9 +416,12 @@ export const getDocumentsPage = async (options: {
         }
         // If folderId is null and not undefined, show all documents (no folder filter)
 
+        // CRITICAL FIX: Filter out soft-deleted documents
+        query = query.eq('is_deleted', false);
+
         query = query.order(orderBy, { ascending: orderDir === 'asc' });
 
-        if (search && search.trim()) {
+        if (typeof search === 'string' && search.trim()) {
           const term = `%${search.trim()}%`;
           query = query.or(`original_filename.ilike.${term},filename.ilike.${term}`);
         }
@@ -445,9 +514,102 @@ export const getDocument = async (
 };
 
 /**
- * Delete a document and its storage file
+ * Soft delete a document - move to trash (with 30-day recovery window)
  */
 export const deleteDocument = async (
+  documentId: string,
+  userId?: string
+): Promise<{ success: boolean; trashId?: string; error?: string }> => {
+  try {
+    const { data: document } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('id', documentId)
+      .single();
+
+    if (!document) {
+      return { success: false, error: 'Document not found' };
+    }
+
+    // Move to trash table
+    const trashEntry = {
+      user_id: document.user_id,
+      resource_type: 'document',
+      resource_id: documentId,
+      resource_name: document.original_filename || document.filename,
+      size_bytes: document.file_size || 0,
+      original_path_json: { storage_path: document.storage_path },
+    };
+
+    const { data: trashData, error: trashError } = await supabase
+      .from('trash')
+      .insert([trashEntry])
+      .select()
+      .single();
+
+    if (trashError) {
+      const appError = handleApiError(trashError, {
+        component: 'deleteDocument',
+        action: 'trash_insert',
+        resource: documentId,
+      });
+      return { success: false, error: appError.message };
+    }
+
+    // Mark document as deleted (soft delete)
+    const { error: updateError } = await supabase
+      .from('documents')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+      })
+      .eq('id', documentId);
+
+    if (updateError) {
+      const appError = handleApiError(updateError, {
+        component: 'deleteDocument',
+        action: 'soft_delete',
+        resource: documentId,
+      });
+      return { success: false, error: appError.message };
+    }
+
+    // Audit log
+    await logActivity({
+      action: 'document_deleted',
+      actorId: userId,
+      resourceType: 'document',
+      resourceId: documentId,
+      description: `Moved "${document.filename || 'document'}" to trash`,
+      details: {
+        filename: document.filename,
+        fileSize: document.file_size,
+        trashId: trashData?.id,
+      },
+    }).catch(() => {
+      // Log failure silently
+    });
+
+    logger.info('Document moved to trash', {
+      component: 'deleteDocument',
+      resource: documentId,
+      trashId: trashData?.id,
+    });
+
+    return { success: true, trashId: trashData?.id };
+  } catch (error) {
+    const appError = handleApiError(error, {
+      component: 'deleteDocument',
+      resource: documentId,
+    });
+    return { success: false, error: appError.message };
+  }
+};
+
+/**
+ * Permanently delete a document from trash
+ */
+export const permanentlyDeleteDocument = async (
   documentId: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
@@ -457,50 +619,166 @@ export const deleteDocument = async (
       .eq('id', documentId)
       .single();
 
-    if (document) {
+    if (document && isSafeStoragePath(document.storage_path)) {
       try {
-        if (isSafeStoragePath(document.storage_path)) {
-          await supabase.storage
-            .from('documents')
-            .remove([document.storage_path]);
-        } else {
-          logger.warn('Refusing to delete unsafe storage path', {
-            component: 'deleteDocument',
-            resource: documentId,
-            storage_path: document.storage_path,
-          });
-        }
+        await supabase.storage
+          .from('documents')
+          .remove([document.storage_path]);
       } catch {
-        logger.warn('Failed to delete storage file', {
-          component: 'deleteDocument',
+        logger.warn('Failed to delete storage file during permanent delete', {
+          component: 'permanentlyDeleteDocument',
           resource: documentId,
         });
-        // Continue with database deletion even if storage deletion fails
+        // Continue with database deletion
       }
     }
 
-    const { error } = await supabase
-      .from('documents')
-      .delete()
-      .eq('id', documentId);
+    // Hard delete from database
+    await supabase.from('documents').delete().eq('id', documentId);
 
-    if (error) {
-      const appError = handleApiError(error, {
-        component: 'deleteDocument',
-        resource: documentId,
+    // Remove from trash
+    await supabase.from('trash').delete().eq('resource_id', documentId);
+
+    return { success: true };
+  } catch (error) {
+    const appError = handleApiError(error, {
+      component: 'permanentlyDeleteDocument',
+      resource: documentId,
+    });
+    return { success: false, error: appError.message };
+  }
+};
+
+/**
+ * Restore document from trash
+ */
+export const restoreFromTrash = async (
+  trashId: string
+): Promise<{ success: boolean; documentId?: string; error?: string }> => {
+  try {
+    const { data: trashItem } = await supabase
+      .from('trash')
+      .select('*')
+      .eq('id', trashId)
+      .single();
+
+    if (!trashItem) {
+      return { success: false, error: 'Trash item not found' };
+    }
+
+    // Restore document
+    const { error: restoreError } = await supabase
+      .from('documents')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+      })
+      .eq('id', trashItem.resource_id);
+
+    if (restoreError) {
+      const appError = handleApiError(restoreError, {
+        component: 'restoreFromTrash',
+        resource: trashId,
       });
       return { success: false, error: appError.message };
     }
 
-    logger.info('Document deleted successfully', {
-      component: 'deleteDocument',
-      resource: documentId,
-    });
-    return { success: true };
+    // Remove from trash
+    await supabase.from('trash').delete().eq('id', trashId);
+
+    return { success: true, documentId: trashItem.resource_id };
   } catch (error) {
     const appError = handleApiError(error, {
-      component: 'deleteDocument',
-      resource: documentId,
+      component: 'restoreFromTrash',
+      resource: trashId,
+    });
+    return { success: false, error: appError.message };
+  }
+};
+
+/**
+ * Get user's trash
+ */
+export const getUserTrash = async (): Promise<{ success: boolean; trash?: any[]; error?: string }> => {
+  try {
+    const { data, error } = await supabase
+      .from('trash')
+      .select('*')
+      .gte('expires_at', new Date().toISOString())
+      .order('deleted_at', { ascending: false });
+
+    if (error) {
+      const appError = handleApiError(error, {
+        component: 'getUserTrash',
+      });
+      return { success: false, error: appError.message };
+    }
+
+    return { success: true, trash: data || [] };
+  } catch (error) {
+    const appError = handleApiError(error, {
+      component: 'getUserTrash',
+    });
+    return { success: false, error: appError.message };
+  }
+};
+
+/**
+ * Get storage usage for current user
+ */
+export const getStorageUsage = async (): Promise<{
+  success: boolean;
+  usage?: {
+    used_gb: number;
+    quota_gb: number;
+    usage_percent: number;
+    document_count: number;
+    remaining_gb: number;
+  };
+  error?: string;
+}> => {
+  try {
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    // Get from user_storage_usage table (filtered by current user)
+    // Use maybeSingle() to handle case where user has no storage usage yet
+    const { data: usage, error: usageError } = await supabase
+      .from('user_storage_usage')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    // Get quota from profiles
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('storage_quota_bytes')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (usageError || profileError) {
+      return { success: false, error: 'Failed to load storage usage' };
+    }
+
+    const quota = profile?.storage_quota_bytes || 5 * 1024 * 1024 * 1024;
+    const used = usage?.total_bytes || 0;
+
+    return {
+      success: true,
+      usage: {
+        used_gb: Math.round((used / (1024 ** 3)) * 100) / 100,
+        quota_gb: Math.round((quota / (1024 ** 3)) * 100) / 100,
+        usage_percent: Math.round((used / quota) * 1000) / 10,
+        document_count: usage?.document_count || 0,
+        remaining_gb: Math.round(((quota - used) / (1024 ** 3)) * 100) / 100,
+      },
+    };
+  } catch (error) {
+    const appError = handleApiError(error, {
+      component: 'getStorageUsage',
     });
     return { success: false, error: appError.message };
   }
@@ -629,6 +907,25 @@ export const updateDocument = async (
       component: 'updateDocument',
       resource: documentId,
     });
+
+    // Audit log document update
+    await logActivity({
+      action: 'document_updated',
+      actorId: userId,
+      resourceType: 'document',
+      resourceId: documentId,
+      description: `Updated document "${document.filename}" to version ${updatedDoc.version}`,
+      details: {
+        filename: document.filename,
+        oldFileSize: document.file_size,
+        newFileSize: blob.size,
+        oldVersion: document.version,
+        newVersion: updatedDoc.version,
+      },
+    }).catch(() => {
+      // Log failure silently - don't block operation
+    });
+
     return { success: true, document: updatedDoc };
   } catch (error) {
     const appError = handleApiError(error, {
@@ -745,6 +1042,34 @@ export const saveDocumentToAppFolder = async (
   options?: SaveDocumentCopyOptions
 ): Promise<{ success: boolean; fileId?: string; document?: Document; error?: string }> => {
   try {
+    if (!userId) {
+      return { success: false, error: 'User is required' };
+    }
+
+    const targetFolderId = options?.folderId ?? folderId ?? null;
+    console.log('📁 [saveDocumentToAppFolder] Starting save:', { documentId, userId, targetFolderId, providedFolderId: folderId, optionsFolderId: options?.folderId });
+
+    // Validate folder ownership if folderId is provided
+    if (targetFolderId) {
+      const { data: folder, error: folderError } = await supabase
+        .from('folders')
+        .select('id, user_id, name')
+        .eq('id', targetFolderId)
+        .single();
+
+      if (folderError || !folder) {
+        console.error('❌ [saveDocumentToAppFolder] Folder not found:', targetFolderId);
+        return { success: false, error: 'Target folder not found' };
+      }
+
+      if (folder.user_id !== userId) {
+        console.error('❌ [saveDocumentToAppFolder] Unauthorized folder access:', { targetFolderId, folderOwner: folder.user_id, requestedBy: userId });
+        return { success: false, error: 'You do not have permission to save to this folder' };
+      }
+      
+      console.log('✅ [saveDocumentToAppFolder] Folder verified:', { folderId: folder.id, folderName: folder.name, userId });
+    }
+
     // Get the current document
     const { data: document, error: fetchError } = await supabase
       .from('documents')

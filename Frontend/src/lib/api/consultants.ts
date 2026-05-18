@@ -39,7 +39,7 @@ export const getConsultantsPageCursor = async (options: {
       query = query.eq('status', status);
     }
 
-    if (search && search.trim()) {
+    if (typeof search === 'string' && search.trim()) {
       const term = `%${search.trim()}%`;
       query = query.or(
         `name.ilike.${term},email.ilike.${term},phone.ilike.${term},primary_skills.ilike.${term},secondary_skills.ilike.${term}`
@@ -146,7 +146,7 @@ export const getConsultantsPage = async (options: {
       query = query.eq('status', status);
     }
 
-    if (search && search.trim()) {
+    if (typeof search === 'string' && search.trim()) {
       const term = `%${search.trim()}%`;
       // Use ilike for trigram-optimized search (enable pg_trgm for best performance)
       query = query.or(
@@ -186,13 +186,18 @@ export const getConsultantById = async (
       .from('consultants')
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     if (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error fetching consultant:', error.message);
       }
       return { success: false, error: error.message };
+    }
+
+    // maybeSingle() returns null if no rows found
+    if (!data) {
+      return { success: false, error: 'Consultant not found' };
     }
 
     return { success: true, consultant: data };
@@ -230,6 +235,8 @@ export const createConsultant = async (
       resourceType: 'consultant',
       resourceId: data.id,
       description: `Created consultant "${data.name}"`,
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
 
     return { success: true, consultant: data };
@@ -249,10 +256,14 @@ export const updateConsultant = async (
       .from('consultants')
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     if (fetchError) {
       return { success: false, error: fetchError.message };
+    }
+
+    if (!oldData) {
+      return { success: false, error: 'Consultant not found' };
     }
 
     const dataToUpdate = {
@@ -281,6 +292,8 @@ export const updateConsultant = async (
       resourceId: id,
       description,
       details: { changes },
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
 
     return { success: true, consultant: data };
@@ -300,6 +313,8 @@ export const deleteConsultant = async (
       resourceType: 'consultant',
       resourceId: id,
       description: 'Deleted consultant',
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
 
     const { error } = await supabase

@@ -13,11 +13,94 @@ const computeRoundIndex = (roundText?: string | null | number): number => {
 
 type Interview = Database['public']['Tables']['interviews']['Row'];
 type InterviewInsert = Database['public']['Tables']['interviews']['Insert'];
+const MAX_REQUIREMENT_IDS_PER_QUERY = 100;
 
 export interface InterviewWithLogs extends Omit<Interview, 'created_by' | 'updated_by'> {
   created_by?: { id: string; full_name: string; email: string } | null | undefined;
   updated_by?: { id: string; full_name: string; email: string } | null | undefined;
 }
+
+export const getInterviewsByRequirementIdsPage = async (options: {
+  requirementIds: string[];
+  limit?: number;
+  offset?: number;
+}): Promise<{ success: boolean; interviews?: InterviewWithLogs[]; error?: string }> => {
+  const { requirementIds, limit = 1000, offset = 0 } = options;
+  if (!requirementIds.length) {
+    return { success: true, interviews: [] };
+  }
+
+  try {
+    const start = offset;
+    const end = offset + limit - 1;
+
+    // Safety fallback: split oversized IN filters to avoid 400 Bad Request.
+    // We preserve paging behavior by limiting each chunk to [0..end], merging,
+    // then applying offset/limit on the merged sorted list.
+    if (requirementIds.length > MAX_REQUIREMENT_IDS_PER_QUERY) {
+      const merged: InterviewWithLogs[] = [];
+      for (let i = 0; i < requirementIds.length; i += MAX_REQUIREMENT_IDS_PER_QUERY) {
+        const idChunk = requirementIds.slice(i, i + MAX_REQUIREMENT_IDS_PER_QUERY);
+        const { data, error } = await supabase
+          .from('interviews')
+          .select('*')
+          .in('requirement_id', idChunk)
+          .order('requirement_id', { ascending: true })
+          .order('round_index', { ascending: true })
+          .order('scheduled_date', { ascending: true })
+          .range(0, end);
+
+        if (error) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error fetching interviews by requirement ids (chunked):', error.message);
+          }
+          return { success: false, error: error.message };
+        }
+        if (data?.length) {
+          merged.push(...(data as InterviewWithLogs[]));
+        }
+      }
+
+      merged.sort((a, b) => {
+        const reqCmp = (a.requirement_id || '').localeCompare(b.requirement_id || '');
+        if (reqCmp !== 0) return reqCmp;
+        const roundA = Number((a as any).round_index ?? 0);
+        const roundB = Number((b as any).round_index ?? 0);
+        if (roundA !== roundB) return roundA - roundB;
+        const dateA = a.scheduled_date || '';
+        const dateB = b.scheduled_date || '';
+        return dateA.localeCompare(dateB);
+      });
+
+      const paged = merged.slice(start, end + 1);
+      return { success: true, interviews: paged };
+    }
+
+    const { data, error } = await supabase
+      .from('interviews')
+      .select('*')
+      .in('requirement_id', requirementIds)
+      .order('requirement_id', { ascending: true })
+      .order('round_index', { ascending: true })
+      .order('scheduled_date', { ascending: true })
+      .range(start, end);
+
+    if (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error fetching interviews by requirement ids:', error.message);
+      }
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, interviews: (data || []) as InterviewWithLogs[] };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Exception fetching interviews by requirement ids:', errorMsg);
+    }
+    return { success: false, error: 'Failed to fetch interviews' };
+  }
+};
 
 export const getInterviewsPageCursor = async (options: {
   userId?: string;
@@ -328,6 +411,8 @@ export const createInterview = async (
       resourceType: 'interview',
       resourceId: data.id,
       description: `Created interview #${interviewNumber} scheduled for ${new Date(data.scheduled_date).toLocaleDateString()}`,
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
 
     return { success: true, interview: data };
@@ -382,6 +467,8 @@ export const updateInterview = async (
       resourceId: id,
       description,
       details: { changes },
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
 
     return { success: true, interview: data };
@@ -418,6 +505,8 @@ export const deleteInterview = async (
       resourceType: 'interview',
       resourceId: id,
       description: 'Deleted interview',
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
 
     const { error } = await supabase

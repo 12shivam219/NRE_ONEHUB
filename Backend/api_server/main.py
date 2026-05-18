@@ -20,6 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import datetime
 from dotenv import load_dotenv
 from starlette.middleware.gzip import GZipMiddleware
 
@@ -36,6 +37,8 @@ from .auth_utils import (
     allow_legacy_onlyoffice_callback,
     get_text_processor_api_key,
     issue_onlyoffice_callback_token,
+    issue_onlyoffice_config_token,
+    issue_onlyoffice_request_token,
     require_supabase_user_id,
     resolve_onlyoffice_callback_public_base,
     resolve_safe_automation_download_path,
@@ -52,6 +55,7 @@ from utils.batch_resume_injector import BatchResumeInjector
 from utils.validators import InputValidator
 from utils.deduplicator import PointDeduplicator
 from utils.gemini_points_generator import GeminiPointsGenerator
+from utils.storage_manager import TrashManager, StorageQuotaManager
 
 import requests
 from io import BytesIO
@@ -124,6 +128,46 @@ class OnlyOfficeForceSaveRequest(BaseModel):
 
 class OnlyofficeCallbackUrlRequest(BaseModel):
     document_id: str
+
+
+class OnlyofficeConfigTokenRequest(BaseModel):
+    document_id: str
+    config: Dict[str, Any]
+
+
+# ==================== Storage & Quota Models ====================
+
+class StorageQuotaCheckRequest(BaseModel):
+    """Check if file upload is allowed"""
+    file_size_bytes: int
+
+
+class StorageQuotaCheckResponse(BaseModel):
+    """Quota check response"""
+    success: bool
+    allowed: bool
+    quota_bytes: Optional[int] = None
+    used_bytes: Optional[int] = None
+    usage_percent: Optional[float] = None
+    error: Optional[str] = None
+
+
+class StorageUsageResponse(BaseModel):
+    """Storage usage information"""
+    plan: str
+    quota_bytes: int
+    quota_gb: float
+    used_bytes: int
+    used_gb: float
+    remaining_bytes: int
+    remaining_gb: float
+    usage_percent: float
+    document_count: int
+
+
+class RestoreFromTrashRequest(BaseModel):
+    """Restore document from trash"""
+    trash_id: str
 
 
 def get_onlyoffice_document_server_url() -> str:
@@ -482,18 +526,23 @@ class ResumeInjectionRequest(BaseModel):
 
 @app.post("/api/detect-bookmarks", dependencies=[Depends(verify_optional_text_processor_api_key)])
 async def detect_bookmarks(file: UploadFile = File(...)) -> ApiResponse:
-    """Detect bookmarks in uploaded resume"""
+    """Detect bookmarks in uploaded resume, auto-creating them from a reference when missing."""
     try:
         resume_bytes = io.BytesIO(await file.read())
         injector = ResumeInjector()
-        bookmarks = injector.get_available_bookmarks(resume_bytes)
+        resume_bytes, bookmarks, bookmark_details = injector.bookmark_manager.ensure_bookmarks_from_reference(resume_bytes)
         
         return ApiResponse(
             success=True,
             data={
                 "bookmarks": bookmarks,
                 "count": len(bookmarks),
-                "filename": file.filename
+                "filename": file.filename,
+                "auto_created": bookmark_details.get("auto_created", False),
+                "created_count": bookmark_details.get("created_count", 0),
+                "reference_path": bookmark_details.get("reference_path"),
+                "matches": bookmark_details.get("matches", []),
+                "message": bookmark_details.get("message"),
             }
         )
     
@@ -612,6 +661,17 @@ async def build_onlyoffice_callback_url(
     return {"url": url}
 
 
+@app.post("/api/onlyoffice/config-token")
+async def build_onlyoffice_config_token(
+    body: OnlyofficeConfigTokenRequest,
+    auth_user_id: str = Depends(require_supabase_user_id),
+) -> Dict[str, str]:
+    document_id = verify_uuid(body.document_id, "document_id")
+    fetch_document_record(document_id, auth_user_id)
+    config_token = issue_onlyoffice_config_token(body.config)
+    return {"token": config_token}
+
+
 @app.post("/api/onlyoffice/callback/{document_id}")
 async def onlyoffice_callback(document_id: str, request: Request):
     token = (request.query_params.get("token") or "").strip()
@@ -686,6 +746,12 @@ async def onlyoffice_force_save(
         "key": request.documentKey,
         "userdata": request_id,
     }
+    command_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if (os.getenv("ONLYOFFICE_DISABLE_JWT") or "").strip().lower() not in ("1", "true", "yes", "on"):
+        command_headers["Authorization"] = f"Bearer {issue_onlyoffice_request_token(payload)}"
 
     command_error: Optional[str] = None
     for endpoint in (
@@ -697,7 +763,7 @@ async def onlyoffice_force_save(
                 "POST",
                 endpoint,
                 payload=payload,
-                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                headers=command_headers,
             )
             if int(response.get("error", 0)) != 0:
                 command_error = f"ONLYOFFICE command service returned error {response.get('error')}"
@@ -864,6 +930,15 @@ class AutomationRequest(BaseModel):
     user_id: str  # User ID for Supabase
     resume_file_id: Optional[str] = None  # For Neon storage
     storage_option: str = "supabase"  # local, google_drive, onedrive, neon, supabase
+
+
+class AutomationEmailRequest(BaseModel):
+    """Send a processed automation resume to a recruiter."""
+    document_id: str
+    recruiter_email: str
+    job_title: str
+    personal_message: Optional[str] = None
+    user_id: str
 
 @app.post("/api/automation")
 async def run_automation(
@@ -1083,7 +1158,6 @@ async def run_automation(
         
         # Clean up temporary files
         background_tasks.add_task(lambda: temp_file.unlink(missing_ok=True))
-        background_tasks.add_task(lambda: output_file.unlink(missing_ok=True))
         
         # Return results
         return ApiResponse(
@@ -1092,6 +1166,7 @@ async def run_automation(
                 "document_id": doc_id,
                 "filename": processed_filename,
                 "original_filename": original_filename,
+                "automation_output_path": str(output_file),
                 "match_score": result.get("match_score", 0),
                 "generated_points": result.get("extracted_points", ""),
                 "file_size": output_content.getbuffer().nbytes,
@@ -1135,6 +1210,118 @@ def _extract_technologies_from_resume(text: str) -> List[str]:
     
     return found_techs
 
+
+@app.post("/api/automation/send-email")
+async def send_automation_email(
+    request: AutomationEmailRequest,
+    auth_user_id: str = Depends(require_supabase_user_id),
+) -> ApiResponse:
+    """Send an already processed automation resume by email."""
+    try:
+        verified_user = verify_uuid(request.user_id, "user_id")
+        if verified_user != auth_user_id:
+            raise HTTPException(status_code=403, detail="user_id does not match authenticated session")
+
+        document_ref = request.document_id.strip()
+        if not document_ref:
+            raise ValueError("Processed resume reference is required")
+        if not request.recruiter_email or "@" not in request.recruiter_email:
+            raise ValueError("Invalid recruiter email address")
+
+        gmail_address = (
+            os.getenv("AUTOMATION_GMAIL_ADDRESS")
+            or os.getenv("GMAIL_ADDRESS")
+            or os.getenv("EMAIL_ADDRESS")
+        )
+        gmail_app_password = (
+            os.getenv("AUTOMATION_GMAIL_APP_PASSWORD")
+            or os.getenv("GMAIL_APP_PASSWORD")
+            or os.getenv("EMAIL_APP_PASSWORD")
+        )
+
+        if not gmail_address or not gmail_app_password:
+            raise ValueError(
+                "Email sending is not configured. Set AUTOMATION_GMAIL_ADDRESS and "
+                "AUTOMATION_GMAIL_APP_PASSWORD in Backend/.env."
+            )
+
+        file_content, document_meta, fetch_error = await fetch_document_from_supabase(
+            document_ref,
+            verified_user,
+        )
+        if fetch_error and "/" in document_ref:
+            storage_path = document_ref
+            expected_prefix = f"{verified_user}/"
+            if not storage_path.startswith(expected_prefix):
+                raise ValueError("Invalid processed resume storage path")
+
+            storage_headers = {
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+            }
+            download_url = f"{SUPABASE_URL}/storage/v1/object/documents/{urllib.parse.quote(storage_path)}"
+            file_response = requests.get(download_url, headers=storage_headers, timeout=30)
+
+            if file_response.status_code != 200:
+                raise ValueError(f"Failed to download processed resume: {file_response.status_code}")
+
+            file_content = BytesIO(file_response.content)
+            document_meta = {
+                "filename": Path(storage_path).name,
+                "original_filename": Path(storage_path).name,
+                "storage_path": storage_path,
+            }
+            fetch_error = None
+
+        if fetch_error:
+            raise ValueError(f"Failed to fetch processed resume: {fetch_error}")
+
+        from utils.email_sender import GmailSender
+
+        filename = (
+            document_meta.get("original_filename")
+            or document_meta.get("filename")
+            or "Resume_Updated.docx"
+        )
+        subject = f"Resume - {request.job_title}"
+        body = request.personal_message or (
+            f"Hi,\n\n"
+            f"Please find attached my updated resume for the {request.job_title} position.\n\n"
+            f"Best regards"
+        )
+
+        sender = GmailSender(gmail_address, gmail_app_password)
+        success, message = sender.send_email(
+            recipient_email=request.recruiter_email,
+            subject=subject,
+            body=body.replace("\n", "<br>"),
+            attachment_name=filename,
+            attachment_bytes=file_content,
+        )
+
+        if not success:
+            raise ValueError(message)
+
+        return ApiResponse(
+            success=True,
+            data={
+                "message": message,
+                "recipient_email": request.recruiter_email,
+                "document_id": document_ref,
+                "filename": filename,
+            },
+        )
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.error(f"Automation email validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error sending automation email: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/automation/download/{file_id}")
 async def download_automation_result(file_id: str) -> FileResponse:
     """Download automation result file"""
@@ -1154,6 +1341,260 @@ async def download_automation_result(file_id: str) -> FileResponse:
     except Exception as e:
         logger.error(f"Error downloading file: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== TAB 6: Storage Management & Quotas ====================
+
+@app.post("/api/check-storage-quota", dependencies=[Depends(require_supabase_user_id)])
+async def check_storage_quota(request: StorageQuotaCheckRequest, user_id: str = Depends(require_supabase_user_id)) -> StorageQuotaCheckResponse:
+    """Check if user can upload file of given size"""
+    try:
+        supabase_url, service_key = require_supabase_config()
+        
+        from supabase import create_client
+        supabase = create_client(supabase_url, service_key)
+        
+        # Get user quota from profiles
+        try:
+            user_result = supabase.table('profiles').select(
+                'storage_plan, storage_quota_bytes'
+            ).eq('id', user_id).single().execute()
+            user_data = user_result.data if user_result.data else None
+        except:
+            user_data = None
+        
+        # Get current usage from user_storage_usage
+        try:
+            usage_result = supabase.table('user_storage_usage').select(
+                'total_bytes'
+            ).eq('user_id', user_id).single().execute()
+            current_usage = usage_result.data['total_bytes'] if usage_result.data else 0
+        except:
+            current_usage = 0
+        
+        if not user_data:
+            quota = 5 * 1024 * 1024 * 1024  # 5GB default
+        else:
+            quota = user_data.get('storage_quota_bytes', 5 * 1024 * 1024 * 1024)
+        
+        # Check if adding new file would exceed quota
+        allowed = (current_usage + request.file_size_bytes) <= quota
+        error_msg = None if allowed else (
+            f"Storage quota exceeded. "
+            f"File size: {request.file_size_bytes / (1024 * 1024):.1f} MB, "
+            f"Available: {max(0, (quota - current_usage) / (1024 * 1024)):.1f} MB"
+        )
+        
+        return StorageQuotaCheckResponse(
+            success=True,
+            allowed=allowed,
+            quota_bytes=quota,
+            used_bytes=current_usage,
+            usage_percent=round((current_usage / quota * 100), 1) if quota > 0 else 0,
+            error=error_msg
+        )
+    
+    except Exception as e:
+        logger.error(f"Error checking storage quota: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to check quota: {str(e)}")
+
+
+@app.get("/api/storage-usage", dependencies=[Depends(require_supabase_user_id)])
+async def get_storage_usage(user_id: str = Depends(require_supabase_user_id)) -> ApiResponse:
+    """Get user's current storage usage"""
+    try:
+        supabase_url, service_key = require_supabase_config()
+        
+        from supabase import create_client
+        supabase = create_client(supabase_url, service_key)
+        
+        # Get user profile
+        try:
+            user_result = supabase.table('profiles').select(
+                'storage_plan, storage_quota_bytes'
+            ).eq('id', user_id).single().execute()
+            user_data = user_result.data if user_result.data else {}
+        except:
+            user_data = {}
+        
+        # Get usage data
+        try:
+            usage_result = supabase.table('user_storage_usage').select(
+                'total_bytes, document_count'
+            ).eq('user_id', user_id).single().execute()
+            usage_data = usage_result.data if usage_result.data else {}
+        except:
+            usage_data = {}
+        
+        quota_bytes = user_data.get('storage_quota_bytes', 5 * 1024 * 1024 * 1024)
+        used_bytes = usage_data.get('total_bytes', 0)
+        usage_percent = (used_bytes / quota_bytes * 100) if quota_bytes > 0 else 0
+        
+        response_data = {
+            'plan': user_data.get('storage_plan', 'starter'),
+            'quota_bytes': quota_bytes,
+            'quota_gb': round(quota_bytes / (1024**3), 2),
+            'used_bytes': used_bytes,
+            'used_gb': round(used_bytes / (1024**3), 2),
+            'remaining_bytes': max(0, quota_bytes - used_bytes),
+            'remaining_gb': round(max(0, quota_bytes - used_bytes) / (1024**3), 2),
+            'usage_percent': round(usage_percent, 1),
+            'document_count': usage_data.get('document_count', 0),
+        }
+        
+        return ApiResponse(
+            success=True,
+            data=response_data
+        )
+    
+    except Exception as e:
+        logger.error(f"Error getting storage usage: {e}")
+        return ApiResponse(
+            success=False,
+            error=f"Failed to get storage usage: {str(e)}"
+        )
+
+
+@app.get("/api/trash", dependencies=[Depends(require_supabase_user_id)])
+async def get_user_trash(user_id: str = Depends(require_supabase_user_id)) -> ApiResponse:
+    """Get user's trash items"""
+    try:
+        supabase_url, service_key = require_supabase_config()
+        
+        from supabase import create_client
+        supabase = create_client(supabase_url, service_key)
+        
+        # Get trash items
+        try:
+            trash_result = supabase.table('trash').select('*').eq(
+                'user_id', user_id
+            ).gte('expires_at', datetime.utcnow().isoformat()).order(
+                'deleted_at', ascending=False
+            ).execute()
+            trash_items = trash_result.data if trash_result.data else []
+        except Exception as e:
+            logger.error(f"Failed to get trash: {e}")
+            trash_items = []
+        
+        return ApiResponse(
+            success=True,
+            data={"items": trash_items}
+        )
+    
+    except Exception as e:
+        logger.error(f"Error fetching trash: {e}")
+        return ApiResponse(
+            success=False,
+            error=f"Failed to fetch trash: {str(e)}"
+        )
+
+
+@app.post("/api/trash/{trash_id}/restore", dependencies=[Depends(require_supabase_user_id)])
+async def restore_from_trash(trash_id: str, user_id: str = Depends(require_supabase_user_id)) -> ApiResponse:
+    """Restore document from trash"""
+    try:
+        supabase_url, service_key = require_supabase_config()
+        
+        from supabase import create_client
+        supabase = create_client(supabase_url, service_key)
+        
+        # Get trash entry
+        try:
+            trash_result = supabase.table('trash').select('*').eq(
+                'id', trash_id
+            ).eq('user_id', user_id).single().execute()
+            trash_data = trash_result.data if trash_result.data else None
+        except:
+            trash_data = None
+        
+        if not trash_data:
+            return ApiResponse(
+                success=False,
+                error='Trash entry not found'
+            )
+        
+        # Restore document
+        try:
+            supabase.table('documents').update({
+                'is_deleted': False,
+                'deleted_at': None
+            }).eq('id', trash_data['resource_id']).execute()
+        except Exception as e:
+            logger.error(f"Failed to restore document: {e}")
+            return ApiResponse(
+                success=False,
+                error="Failed to restore document"
+            )
+        
+        # Remove from trash
+        try:
+            supabase.table('trash').delete().eq('id', trash_id).execute()
+        except Exception as e:
+            logger.error(f"Failed to delete trash entry: {e}")
+        
+        return ApiResponse(
+            success=True,
+            data={"document_id": trash_data['resource_id']}
+        )
+    
+    except Exception as e:
+        logger.error(f"Error restoring from trash: {e}")
+        return ApiResponse(
+            success=False,
+            error=f"Failed to restore document: {str(e)}"
+        )
+
+
+@app.delete("/api/trash/{trash_id}", dependencies=[Depends(require_supabase_user_id)])
+async def permanent_delete_from_trash(trash_id: str, user_id: str = Depends(require_supabase_user_id)) -> ApiResponse:
+    """Permanently delete document from trash"""
+    try:
+        supabase_url, service_key = require_supabase_config()
+        
+        from supabase import create_client
+        supabase = create_client(supabase_url, service_key)
+        
+        # Get trash entry to find storage path
+        try:
+            trash_result = supabase.table('trash').select('*').eq('id', trash_id).eq('user_id', user_id).single().execute()
+            trash_data = trash_result.data if trash_result.data else None
+        except:
+            trash_data = None
+        
+        if not trash_data:
+            return ApiResponse(
+                success=False,
+                error="Trash entry not found"
+            )
+        
+        # Delete storage file if it exists
+        storage_path = trash_data.get('original_path_json', {}).get('storage_path')
+        if storage_path:
+            try:
+                supabase.storage.from_('documents').remove([storage_path])
+            except Exception as e:
+                logger.warning(f"Failed to delete storage file: {e}")
+        
+        # Delete trash entry
+        try:
+            supabase.table('trash').delete().eq('id', trash_id).execute()
+        except Exception as e:
+            logger.error(f"Failed to delete trash entry: {e}")
+            return ApiResponse(
+                success=False,
+                error="Failed to permanently delete"
+            )
+        
+        return ApiResponse(
+            success=True,
+            data={"message": "Item permanently deleted"}
+        )
+    
+    except Exception as e:
+        logger.error(f"Error permanently deleting from trash: {e}")
+        return ApiResponse(
+            success=False,
+            error=f"Failed to permanently delete: {str(e)}"
+        )
 
 # ==================== STARTUP ====================
 

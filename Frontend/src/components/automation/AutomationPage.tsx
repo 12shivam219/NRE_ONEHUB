@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useToast } from '@/contexts/ToastContext';
-import { useRunAutomation } from '@/hooks/useRunAutomation';
+import { useRunAutomation, useSendAutomationEmail } from '@/hooks/useRunAutomation';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocumentsInfinite } from '@/hooks/useDocumentsInfinite';
 import { BrandButton } from '../brand/BrandButton';
@@ -22,6 +22,7 @@ import {
 import {
   CheckCircle,
   FileText,
+  Mail,
   Zap,
   AlertCircle,
 } from 'lucide-react';
@@ -69,6 +70,7 @@ export const AutomationPage: React.FC = () => {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>(undefined);
 
   const { mutate: runAutomation, isPending, data: result } = useRunAutomation();
+  const sendAutomationEmail = useSendAutomationEmail();
 
   const handleInitialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +109,7 @@ export const AutomationPage: React.FC = () => {
         recruiter_email: formData.recruiter_email,
         points_per_tech: formData.points_per_tech,
         personal_message: formData.personal_message,
-        document_id: undefined, // No document_id - backend will auto-select
+        document_id: formData.document_id,
       },
       {
         onSuccess: (data: any) => {
@@ -194,6 +196,23 @@ export const AutomationPage: React.FC = () => {
         type: 'success',
       });
     }
+  };
+
+  const handleSendEmail = () => {
+    if (!result?.document_id) {
+      showToast({
+        message: 'Processed resume is not available yet',
+        type: 'error',
+      });
+      return;
+    }
+
+    sendAutomationEmail.mutate({
+      document_id: result.document_id,
+      recruiter_email: formData.recruiter_email,
+      job_title: formData.job_title,
+      personal_message: formData.personal_message,
+    });
   };
 
   const handleNewAutomation = () => {
@@ -566,6 +585,52 @@ export const AutomationPage: React.FC = () => {
               </Card>
             )}
 
+            {phase === 'processing' && (
+              <Card sx={{ p: 3, boxShadow: 3 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center', textAlign: 'center' }}>
+                  <CircularProgress size={60} sx={{ color: '#2563eb' }} />
+                  <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 600, mb: 1, color: '#111827' }}>
+                      Processing Automation...
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                      This usually takes 15-20 seconds. We're working on your resume!
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ width: '100%', mt: 2 }}>
+                    <LinearProgress sx={{ height: 6, borderRadius: 3 }} />
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#2563eb', fontWeight: 600 }}>
+                          ✓ Extracting technologies...
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                          ⏳ Generating achievement points...
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                          ⏳ Injecting into resume...
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                          ⏳ Saving to storage...
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+
+                  <Typography variant="caption" sx={{ color: '#6b7280', fontStyle: 'italic' }}>
+                    Don't close this window
+                  </Typography>
+                </Box>
+              </Card>
+            )}
+
             {phase === 'completed' && result && (
               <Card sx={{ p: 3, boxShadow: 3 }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -584,6 +649,17 @@ export const AutomationPage: React.FC = () => {
                       </Typography>
                       <Typography variant="body2" sx={{ fontWeight: 500, color: '#111827' }}>
                         {result.filename}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {result?.automation_output_path && (
+                    <Box>
+                      <Typography variant="caption" sx={{ fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
+                        Saved To
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#111827', overflowWrap: 'anywhere' }}>
+                        {result.automation_output_path}
                       </Typography>
                     </Box>
                   )}
@@ -626,7 +702,29 @@ export const AutomationPage: React.FC = () => {
                         fullWidth
                       >
                         <FileText size={18} style={{ marginRight: 8, display: 'inline' }} />
-                        View in Documents
+                        View Saved DOCX
+                      </BrandButton>
+                    )}
+
+                    {result?.document_id && (
+                      <BrandButton
+                        onClick={handleSendEmail}
+                        variant="secondary"
+                        size="lg"
+                        fullWidth
+                        disabled={sendAutomationEmail.isPending}
+                      >
+                        {sendAutomationEmail.isPending ? (
+                          <>
+                            <CircularProgress size={18} style={{ marginRight: 8, display: 'inline' }} />
+                            Sending Email...
+                          </>
+                        ) : (
+                          <>
+                            <Mail size={18} style={{ marginRight: 8, display: 'inline' }} />
+                            Send Email
+                          </>
+                        )}
                       </BrandButton>
                     )}
 
@@ -684,12 +782,12 @@ export const AutomationPage: React.FC = () => {
                   </Box>
                 </Paper>
 
-                <Paper sx={{ p: 2, backgroundColor: phase === 'completed' ? '#fef3c7' : '#f3f4f6' }}>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <Typography variant="h4" sx={{ opacity: phase === 'completed' ? 1 : 0.5 }}>
+                <Paper sx={{ p: 2, backgroundColor: phase === 'completed' ? '#fef3c7' : phase === 'processing' ? '#fbbf24' : '#f3f4f6' }}>
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <Typography variant="h4" sx={{ opacity: (phase === 'completed' || phase === 'processing') ? 1 : 0.5 }}>
                       3️⃣
                     </Typography>
-                    <Box>
+                    <Box sx={{ flex: 1 }}>
                       <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                         Generate & Inject
                       </Typography>
@@ -697,6 +795,9 @@ export const AutomationPage: React.FC = () => {
                         Generate points & save processed resume
                       </Typography>
                     </Box>
+                    {phase === 'processing' && (
+                      <CircularProgress size={24} sx={{ color: '#2563eb' }} />
+                    )}
                   </Box>
                 </Paper>
               </Box>

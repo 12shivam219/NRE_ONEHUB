@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { updateConsultant, deleteConsultant } from '../../lib/api/consultants';
 import { useToast } from '../../contexts/ToastContext';
 import { ResourceAuditTimeline } from '../common/ResourceAuditTimeline';
+import { ResourceAuditDrawer } from '../common/ResourceAuditDrawer';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { LogoLoader } from '../common/LogoLoader';
 import { subscribeToConsultantById, type RealtimeUpdate } from '../../lib/api/realtimeSync';
@@ -21,6 +22,7 @@ import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Chip from '@mui/material/Chip';
 import Avatar from '@mui/material/Avatar';
+import Paper from '@mui/material/Paper';
 
 type Consultant = Database['public']['Tables']['consultants']['Row'];
 type Project = {
@@ -44,6 +46,41 @@ interface ConsultantDetailModalProps {
   updatedBy?: string | null;
 }
 
+type ProfileFieldProps = {
+  label: string;
+  value: string | null | undefined;
+  isLink?: boolean;
+  isMail?: boolean;
+};
+
+function ProfileField({ label, value, isLink = false, isMail = false }: ProfileFieldProps) {
+  const displayValue = value && String(value).trim() ? String(value) : '-';
+  const linkHref = isMail && value ? `mailto:${value}` : value;
+
+  return (
+    <Box sx={{ minHeight: 58 }}>
+      <Typography sx={{ fontSize: '0.74rem', fontWeight: 600, color: '#667085', textTransform: 'uppercase', letterSpacing: '0.04em', mb: 0.5 }}>
+        {label}
+      </Typography>
+      {isLink && value ? (
+        <Typography
+          component="a"
+          href={String(linkHref)}
+          target={isMail ? undefined : '_blank'}
+          rel={isMail ? undefined : 'noopener noreferrer'}
+          sx={{ fontSize: '0.95rem', color: '#1D4ED8', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+        >
+          {displayValue}
+        </Typography>
+      ) : (
+        <Typography sx={{ fontSize: '0.96rem', color: '#101828', fontWeight: 500 }}>
+          {displayValue}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 export const ConsultantDetailModal = ({
   isOpen,
   consultant,
@@ -58,6 +95,7 @@ export const ConsultantDetailModal = ({
   const [formData, setFormData] = useState<Partial<Consultant> | null>(null);
   const [remoteUpdateNotified, setRemoteUpdateNotified] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showAuditDrawer, setShowAuditDrawer] = useState(false);
   const [projectDraft, setProjectDraft] = useState<Project>({
     id: '',
     name: '',
@@ -135,6 +173,22 @@ export const ConsultantDetailModal = ({
       .map((skill) => skill.trim())
       .filter(Boolean);
 
+  const toMonthInputValue = (value?: string | null) => {
+    const raw = String(value || '').trim();
+    const match = raw.match(/^(\d{4})-(\d{2})/);
+    if (!match) return '';
+    return `${match[1]}-${match[2]}`;
+  };
+
+  const formatMonthYear = (value?: string | null) => {
+    const monthValue = toMonthInputValue(value);
+    if (!monthValue) return '-';
+    const [year, month] = monthValue.split('-');
+    const date = new Date(Number(year), Number(month) - 1, 1);
+    if (Number.isNaN(date.getTime())) return monthValue;
+    return date.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+  };
+
   const primarySkillTags = parseSkills(formData.primary_skills as string | null | undefined);
   const secondarySkillTags = parseSkills(formData.secondary_skills as string | null | undefined);
 
@@ -169,44 +223,6 @@ export const ConsultantDetailModal = ({
 
   const handleFieldChange = (key: keyof Consultant, value: unknown) => {
     setFormData(prev => prev ? { ...prev, [key]: value } : null);
-  };
-
-  const ProfileField = ({
-    label,
-    value,
-    isLink = false,
-    isMail = false,
-  }: {
-    label: string;
-    value: string | null | undefined;
-    isLink?: boolean;
-    isMail?: boolean;
-  }) => {
-    const displayValue = value && String(value).trim() ? String(value) : '-';
-    const linkHref = isMail && value ? `mailto:${value}` : value;
-
-    return (
-      <Box sx={{ minHeight: 58 }}>
-        <Typography sx={{ fontSize: '0.74rem', fontWeight: 600, color: '#667085', textTransform: 'uppercase', letterSpacing: '0.04em', mb: 0.5 }}>
-          {label}
-        </Typography>
-        {isLink && value ? (
-          <Typography
-            component="a"
-            href={String(linkHref)}
-            target={isMail ? undefined : '_blank'}
-            rel={isMail ? undefined : 'noopener noreferrer'}
-            sx={{ fontSize: '0.95rem', color: '#1D4ED8', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
-          >
-            {displayValue}
-          </Typography>
-        ) : (
-          <Typography sx={{ fontSize: '0.96rem', color: '#101828', fontWeight: 500 }}>
-            {displayValue}
-          </Typography>
-        )}
-      </Box>
-    );
   };
 
   const getProjects = (): Project[] => {
@@ -254,7 +270,17 @@ export const ConsultantDetailModal = ({
       ...projectDraft,
       id: `project-${Date.now()}`,
     };
-    updateProjects([...getProjects(), nextProject]);
+    const updatedProjectsList = [...getProjects(), nextProject];
+    updateProjects(updatedProjectsList);
+    
+    // Show success feedback
+    showToast({
+      type: 'success',
+      title: 'Project added',
+      message: `"${projectDraft.name}" has been added. Don't forget to save your changes!`,
+    });
+    
+    // Reset form
     setProjectDraft({
       id: '',
       name: '',
@@ -266,6 +292,15 @@ export const ConsultantDetailModal = ({
       currently_working: false,
       description: '',
     });
+    
+    // Debug logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✓ Project added to state:', {
+        newProject: nextProject,
+        totalProjects: updatedProjectsList.length,
+        formDataProjects: updatedProjectsList,
+      });
+    }
   };
 
   const handleRemoveProject = (id: string) => {
@@ -280,6 +315,16 @@ export const ConsultantDetailModal = ({
     
     setIsLoading(true);
 
+    // Debug logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('💾 Saving consultant with data:', {
+        consultantId: consultant.id,
+        projectsCount: getProjects().length,
+        projects: formData.projects,
+        fullFormData: formData,
+      });
+    }
+
     const result = await updateConsultant(
       consultant.id,
       formData as Partial<Consultant>,
@@ -290,13 +335,18 @@ export const ConsultantDetailModal = ({
       showToast({
         type: 'success',
         title: 'Consultant updated',
-        message: 'Changes have been saved successfully.',
+        message: `Consultant saved with ${getProjects().length} project(s).`,
       });
       setIsEditing(false);
       onUpdate();
     } else if (result.error) {
       // Rollback on error
       setFormData(originalFormData);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Save error:', result.error, 'Projects:', formData.projects);
+      }
+      
       showToast({
         type: 'error',
         title: 'Failed to update',
@@ -499,7 +549,7 @@ export const ConsultantDetailModal = ({
               </Box>
 
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', mt: 2.5, display: 'block' }}>
-                Projects
+                Projects ({getProjects().length} {getProjects().length === 1 ? 'project' : 'projects'})
               </Typography>
               <Stack spacing={1.5} sx={{ mt: 1.5 }}>
                 {getProjects().length === 0 ? (
@@ -512,8 +562,8 @@ export const ConsultantDetailModal = ({
                         <TextField label="Domain" size="small" value={project.domain} onChange={(e) => handleProjectChange(project.id, 'domain', e.target.value)} sx={inputSx} />
                         <TextField label="City" size="small" value={project.city} onChange={(e) => handleProjectChange(project.id, 'city', e.target.value)} sx={inputSx} />
                         <TextField label="State" size="small" value={project.state} onChange={(e) => handleProjectChange(project.id, 'state', e.target.value)} sx={inputSx} />
-                        <TextField label="Start Date" type="date" size="small" value={project.start_date} onChange={(e) => handleProjectChange(project.id, 'start_date', e.target.value)} InputLabelProps={{ shrink: true }} sx={inputSx} />
-                        <TextField label="End Date" type="date" size="small" value={project.end_date} disabled={project.currently_working} onChange={(e) => handleProjectChange(project.id, 'end_date', e.target.value)} InputLabelProps={{ shrink: true }} sx={inputSx} />
+                        <TextField label="Start Month" type="month" size="small" value={toMonthInputValue(project.start_date)} onChange={(e) => handleProjectChange(project.id, 'start_date', e.target.value)} InputLabelProps={{ shrink: true }} sx={inputSx} />
+                        <TextField label="End Month" type="month" size="small" value={toMonthInputValue(project.end_date)} disabled={project.currently_working} onChange={(e) => handleProjectChange(project.id, 'end_date', e.target.value)} InputLabelProps={{ shrink: true }} sx={inputSx} />
                         <TextField select label="Currently Working" size="small" value={project.currently_working ? 'yes' : 'no'} onChange={(e) => handleProjectChange(project.id, 'currently_working', e.target.value === 'yes')} sx={inputSx}>
                           <MenuItem value="yes">Yes</MenuItem>
                           <MenuItem value="no">No</MenuItem>
@@ -541,8 +591,8 @@ export const ConsultantDetailModal = ({
                   <TextField label="Domain" size="small" value={projectDraft.domain} onChange={(e) => setProjectDraft(prev => ({ ...prev, domain: e.target.value }))} sx={inputSx} />
                   <TextField label="City" size="small" value={projectDraft.city} onChange={(e) => setProjectDraft(prev => ({ ...prev, city: e.target.value }))} sx={inputSx} />
                   <TextField label="State" size="small" value={projectDraft.state} onChange={(e) => setProjectDraft(prev => ({ ...prev, state: e.target.value }))} sx={inputSx} />
-                  <TextField label="Start Date" type="date" size="small" value={projectDraft.start_date} onChange={(e) => setProjectDraft(prev => ({ ...prev, start_date: e.target.value }))} InputLabelProps={{ shrink: true }} sx={inputSx} />
-                  <TextField label="End Date" type="date" size="small" value={projectDraft.end_date} disabled={projectDraft.currently_working} onChange={(e) => setProjectDraft(prev => ({ ...prev, end_date: e.target.value }))} InputLabelProps={{ shrink: true }} sx={inputSx} />
+                  <TextField label="Start Month" type="month" size="small" value={toMonthInputValue(projectDraft.start_date)} onChange={(e) => setProjectDraft(prev => ({ ...prev, start_date: e.target.value }))} InputLabelProps={{ shrink: true }} sx={inputSx} />
+                  <TextField label="End Month" type="month" size="small" value={toMonthInputValue(projectDraft.end_date)} disabled={projectDraft.currently_working} onChange={(e) => setProjectDraft(prev => ({ ...prev, end_date: e.target.value }))} InputLabelProps={{ shrink: true }} sx={inputSx} />
                   <TextField select label="Currently Working" size="small" value={projectDraft.currently_working ? 'yes' : 'no'} onChange={(e) => setProjectDraft(prev => ({ ...prev, currently_working: e.target.value === 'yes' }))} sx={inputSx}>
                     <MenuItem value="yes">Yes</MenuItem>
                     <MenuItem value="no">No</MenuItem>
@@ -561,13 +611,56 @@ export const ConsultantDetailModal = ({
 
             {/* Audit Log - Admin Only */}
             {isAdmin && (
-              <Box sx={{ pt: 0.5 }}>
-                <ResourceAuditTimeline
-                  resourceType="consultant"
-                  resourceId={consultant.id}
-                  title="Recent admin + CRM actions"
-                />
-              </Box>
+              <Paper
+                sx={{
+                  mt: 3,
+                  pt: 2,
+                  px: 2,
+                  pb: 2,
+                  backgroundColor: '#FAFBFC',
+                  borderRadius: '8px',
+                  border: '1px solid #E5E7EB',
+                }}
+              >
+                <Typography
+                  sx={{
+                    display: 'block',
+                    fontWeight: 700,
+                    color: '#64748B',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '16px',
+                    fontSize: '11px',
+                  }}
+                >
+                  🔐 Admin & CRM Actions
+                </Typography>
+                <Stack spacing={2}>
+                  <Button
+                    variant="contained"
+                    onClick={() => setShowAuditDrawer(true)}
+                    sx={{
+                      backgroundColor: '#3B82F6',
+                      color: 'white',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      '&:hover': { backgroundColor: '#2563EB' },
+                    }}
+                  >
+                    📋 View Audit Trail
+                  </Button>
+                  <Typography sx={{ fontSize: '0.85rem', color: '#6B7280', pt: 1 }}>
+                    Inline Activity Log:
+                  </Typography>
+                </Stack>
+                <Box sx={{ pt: 2 }}>
+                  <ResourceAuditTimeline
+                    resourceType="consultant"
+                    resourceId={consultant.id}
+                    title=""
+                  />
+                </Box>
+              </Paper>
             )}
           </Stack>
         ) : (
@@ -649,15 +742,23 @@ export const ConsultantDetailModal = ({
               {getProjects().length === 0 ? (
                 <Typography sx={{ fontSize: '0.95rem', color: '#101828', fontWeight: 500 }}>No projects added.</Typography>
               ) : (
-                <Stack spacing={1}>
+                <Stack spacing={1.5}>
                   {getProjects().map((project) => (
-                    <Box key={project.id} sx={{ py: 1.25, borderBottom: '1px solid #F2F4F7' }}>
+                    <Box key={project.id} sx={{ py: 1.5, borderBottom: '1px solid #F2F4F7' }}>
                       <Typography sx={{ fontSize: '0.95rem', color: '#101828', fontWeight: 600 }}>
                         {project.name || '-'}
                       </Typography>
-                      <Typography sx={{ fontSize: '0.84rem', color: '#475467', mt: 0.25 }}>
-                        {project.domain || '-'} {project.city ? `• ${project.city}` : ''} {project.state ? `• ${project.state}` : ''}
-                      </Typography>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, columnGap: 4, rowGap: 1.25, mt: 1 }}>
+                        <ProfileField label="Domain" value={project.domain} />
+                        <ProfileField label="City" value={project.city} />
+                        <ProfileField label="State" value={project.state} />
+                        <ProfileField label="Currently Working" value={project.currently_working ? 'Yes' : 'No'} />
+                        <ProfileField label="Start Month" value={formatMonthYear(project.start_date)} />
+                        <ProfileField label="End Month" value={project.currently_working ? 'Present' : formatMonthYear(project.end_date)} />
+                        <Box sx={{ gridColumn: '1 / -1' }}>
+                          <ProfileField label="Description" value={project.description} />
+                        </Box>
+                      </Box>
                     </Box>
                   ))}
                 </Stack>
@@ -665,13 +766,46 @@ export const ConsultantDetailModal = ({
             </Box>
 
             {isAdmin && (
-              <Box sx={{ pt: 1, borderTop: '1px solid #EAECF0' }}>
-                <ResourceAuditTimeline
-                  resourceType="consultant"
-                  resourceId={consultant.id}
-                  title="Recent admin + CRM actions"
-                />
-              </Box>
+              <Paper
+                sx={{
+                  mt: 3,
+                  pt: 2,
+                  px: 2,
+                  pb: 2,
+                  backgroundColor: '#FAFBFC',
+                  borderRadius: '8px',
+                  border: '1px solid #E5E7EB',
+                }}
+              >
+                <Typography
+                  sx={{
+                    display: 'block',
+                    fontWeight: 700,
+                    color: '#64748B',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '16px',
+                    fontSize: '11px',
+                  }}
+                >
+                  🔐 Admin & CRM Actions
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => setShowAuditDrawer(true)}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    background: 'linear-gradient(90deg, #7C3AED 0%, #6B21A8 100%)',
+                    color: '#FFFFFF',
+                    '&:hover': {
+                      background: 'linear-gradient(90deg, #6D28D9 0%, #5B21B6 100%)',
+                    },
+                  }}
+                >
+                  📋 View Audit Trail
+                </Button>
+              </Paper>
             )}
           </Stack>
         )}
@@ -751,6 +885,16 @@ export const ConsultantDetailModal = ({
           </>
         )}
       </DialogActions>
+
+      {/* Audit Trail Drawer */}
+      {consultant && (
+        <ResourceAuditDrawer
+          open={showAuditDrawer}
+          onClose={() => setShowAuditDrawer(false)}
+          resourceType="consultant"
+          resourceId={consultant.id}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

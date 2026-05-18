@@ -39,10 +39,11 @@ export const RecipientManager = ({
   const [newRecipient, setNewRecipient] = useState('');
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
-  // Validate email format
+  // Import isValidEmail from centralized location
+  // Note: Using inline version to match this component's email parsing logic
   const isValidEmail = (email: string) => {
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return regex.test(email.trim());
+    const regex = /^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return regex.test(email.trim()) && !email.includes('..') && !email.startsWith('.') && !email.endsWith('.');
   };
 
   // Parse recipient input (supports "email" or "Name <email>")

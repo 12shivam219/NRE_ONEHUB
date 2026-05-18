@@ -9,7 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual';
 import type { Database, RequirementStatus } from '../../lib/database.types';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../contexts/ToastContext';
@@ -95,6 +95,7 @@ const TableRow = memo(({
 }) => {
   const isAlternate = rowIndex % 2 === 1;
   const statusColor = enhancedStatusColors[req.status as RequirementStatus];
+  const canCreateInterview = req.status === 'SUBMITTED';
   const rowBgColor = isAlternate ? '#FAFBFC' : '#ffffff';
   const [actionMenuAnchorEl, setActionMenuAnchorEl] = useState<HTMLElement | null>(null);
   const actionMenuOpen = Boolean(actionMenuAnchorEl);
@@ -338,24 +339,26 @@ const TableRow = memo(({
             View
           </MenuItem>
           
-          <MenuItem
-            onClick={handleCreateInterview}
-            sx={{
-              py: 1.25,
-              px: 2,
-              fontSize: '0.8125rem',
-              color: '#2563EB',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              '&:hover': {
-                backgroundColor: '#F1F5F9',
-              },
-            }}
-          >
-            <Calendar className="w-4 h-4" />
-            Create Interview
-          </MenuItem>
+          {canCreateInterview && (
+            <MenuItem
+              onClick={handleCreateInterview}
+              sx={{
+                py: 1.25,
+                px: 2,
+                fontSize: '0.8125rem',
+                color: '#2563EB',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                '&:hover': {
+                  backgroundColor: '#F1F5F9',
+                },
+              }}
+            >
+              <Calendar className="w-4 h-4" />
+              Create Interview
+            </MenuItem>
+          )}
           
           {isAdmin && (
             <MenuItem
@@ -706,12 +709,29 @@ export const RequirementsTable = memo(({
     };
   }, [expandedReqs]);
 
+  // Stable identity required: @tanstack/react-virtual memoizes on getItemKey; a new inline
+  // function every render triggers notify → flushSync → "Too many re-renders".
+  const getRowItemKey = useCallback(
+    (index: number) => sortedRequirements[index]?.id ?? index,
+    [sortedRequirements]
+  );
+
+  const measureRowElement = useCallback(
+    (element: Element, _entry: ResizeObserverEntry | undefined, _instance: Virtualizer<HTMLDivElement, Element>) =>
+      element.getBoundingClientRect().height,
+    []
+  );
+
   const rowVirtualizer = useVirtualizer({
     count: sortedRequirements.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 72,
     overscan: 10,
-    measureElement: typeof window !== 'undefined' && navigator.userAgent.indexOf('jsdom') === -1 ? element => element?.getBoundingClientRect().height : undefined,
+    getItemKey: getRowItemKey,
+    measureElement:
+      typeof window !== 'undefined' && navigator.userAgent.indexOf('jsdom') === -1
+        ? measureRowElement
+        : undefined,
   });
 
   const virtualItems = rowVirtualizer.getVirtualItems();

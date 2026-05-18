@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useOfflineCache } from '../../hooks/useOfflineCache';
 import { updateRequirement } from '../../lib/api/requirements';
 import { useToast } from '../../contexts/ToastContext';
-import { ResourceAuditTimeline } from '../common/ResourceAuditTimeline';
+import { ResourceAuditDrawer } from '../common/ResourceAuditDrawer';
 import { RequirementEmailManager } from './RequirementEmailManager';
 import EmailHistoryPanel from './EmailHistoryPanel';
 import { LogoLoader } from '../common/LogoLoader';
@@ -50,6 +50,7 @@ export const RequirementDetailModal = ({
   const [formData, setFormData] = useState<Partial<Requirement> | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'emails' | 'description' | 'history' | 'similar'>('details');
   const [remoteUpdateNotified, setRemoteUpdateNotified] = useState(false);
+  const [showAuditDrawer, setShowAuditDrawer] = useState(false);
 
   useEffect(() => {
     if (!requirement) return;
@@ -59,7 +60,12 @@ export const RequirementDetailModal = ({
     const run = async () => {
       await Promise.resolve();
       if (cancelled) return;
-      setFormData(requirement);
+      // Normalize the 'remote' field from "On-site" to "Onsite"
+      const normalizedData = {
+        ...requirement,
+        remote: requirement.remote === 'On-site' ? 'Onsite' : requirement.remote,
+      };
+      setFormData(normalizedData);
       setIsEditing(false);
       setRemoteUpdateNotified(false);
     };
@@ -117,19 +123,25 @@ export const RequirementDetailModal = ({
   const handleSave = async () => {
     if (!user || !requirement) return;
     
+    // Normalize the 'remote' field before saving
+    const normalizedFormData = {
+      ...formData,
+      remote: formData?.remote === 'On-site' ? 'Onsite' : formData?.remote,
+    };
+    
     // Store original data for rollback in case of error
-    const originalFormData = formData;
+    const originalFormData = normalizedFormData;
     
     setIsLoading(true);
 
     // Check if offline - queue operation
     if (!isOnline) {
-      await queueOfflineOperation('UPDATE', 'requirement', requirement.id, formData as Record<string, unknown>);
+      await queueOfflineOperation('UPDATE', 'requirement', requirement.id, normalizedFormData as Record<string, unknown>);
       
       // Optimistically update local cache
       const updatedRequirement = {
         ...requirement,
-        ...formData,
+        ...normalizedFormData,
         updated_at: new Date().toISOString(),
       };
       await cacheRequirements([updatedRequirement as CachedRequirement], user.id);
@@ -148,7 +160,7 @@ export const RequirementDetailModal = ({
     // Online - update normally
     const result = await updateRequirement(
       requirement.id,
-      formData as Partial<Requirement>,
+      normalizedFormData as Partial<Requirement>,
       user.id
     );
 
@@ -285,8 +297,8 @@ export const RequirementDetailModal = ({
           </Stack>
         </Box>
 
-        {/* Right: Status Badge + Req Number + Close */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+        {/* Right: Status Badge + Req Number */}
+        <Stack sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1.5, flexShrink: 0 }}>
           {/* Status Badge */}
           <Box
             className={`px-4 py-2 rounded-lg border font-semibold text-sm ${getStatusColor(formData?.status || 'NEW')}`}
@@ -307,18 +319,18 @@ export const RequirementDetailModal = ({
           >
             Req #{String(requirement.requirement_number || 'N/A')}
           </Typography>
-        </Box>
+        </Stack>
 
         {/* Close Button */}
         <IconButton
           onClick={onClose}
           aria-label="Close modal"
           sx={{
-            position: 'absolute',
-            right: 16,
-            top: 16,
             color: '#64748B',
+            marginTop: '-8px',
+            marginRight: '-8px',
             '&:hover': { backgroundColor: 'rgba(15, 23, 42, 0.08)' },
+            flexShrink: 0,
           }}
         >
           <X className="w-5 h-5" />
@@ -609,11 +621,21 @@ export const RequirementDetailModal = ({
                       >
                         🔐 Admin & CRM Actions
                       </Typography>
-                      <ResourceAuditTimeline
-                        resourceType="requirement"
-                        resourceId={requirement.id}
-                        title=""
-                      />
+                      <Button
+                        variant="contained"
+                        onClick={() => setShowAuditDrawer(true)}
+                        sx={{
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          background: 'linear-gradient(90deg, #7C3AED 0%, #6B21A8 100%)',
+                          color: '#FFFFFF',
+                          '&:hover': {
+                            background: 'linear-gradient(90deg, #6D28D9 0%, #5B21B6 100%)',
+                          },
+                        }}
+                      >
+                        📋 View Audit Trail
+                      </Button>
                     </Paper>
                   )}
                 </Box>
@@ -676,6 +698,7 @@ export const RequirementDetailModal = ({
                     <MenuItem value="Remote">Remote</MenuItem>
                     <MenuItem value="Hybrid">Hybrid</MenuItem>
                     <MenuItem value="Onsite">Onsite</MenuItem>
+                    <MenuItem value="On-site">On-site</MenuItem>
                   </TextField>
                   <TextField
                     label="Duration"
@@ -927,6 +950,16 @@ export const RequirementDetailModal = ({
           </Stack>
         )}
       </Box>
+
+      {/* Audit Trail Drawer */}
+      {requirement && (
+        <ResourceAuditDrawer
+          open={showAuditDrawer}
+          onClose={() => setShowAuditDrawer(false)}
+          resourceType="requirement"
+          resourceId={requirement.id}
+        />
+      )}
     </Dialog>
   );
 };

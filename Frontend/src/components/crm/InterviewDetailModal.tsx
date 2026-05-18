@@ -4,7 +4,7 @@ import { isValidUrl, isMeetingLink, extractDomainFromUrl } from '../../lib/inter
 import { useAuth } from '../../hooks/useAuth';
 import { updateInterview, deleteInterview } from '../../lib/api/interviews';
 import { useToast } from '../../contexts/ToastContext';
-import { ResourceAuditTimeline } from '../common/ResourceAuditTimeline';
+import { ResourceAuditDrawer } from '../common/ResourceAuditDrawer';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { LogoLoader } from '../common/LogoLoader';
 import { subscribeToInterviewById, type RealtimeUpdate } from '../../lib/api/realtimeSync';
@@ -99,6 +99,7 @@ export const InterviewDetailModal = ({
   const [formData, setFormData] = useState<Partial<Interview> | null>(null);
   const [remoteUpdateNotified, setRemoteUpdateNotified] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showAuditDrawer, setShowAuditDrawer] = useState(false);
 
   useEffect(() => {
     if (!interview) return;
@@ -582,11 +583,21 @@ export const InterviewDetailModal = ({
           {/* Audit Log - Admin Only */}
           {isAdmin && (
             <AccordionSection title="Audit Information" defaultOpen={false}>
-              <ResourceAuditTimeline
-                resourceType="interview"
-                resourceId={interview.id}
-                title="Recent admin + CRM actions"
-              />
+              <Button
+                variant="contained"
+                onClick={() => setShowAuditDrawer(true)}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  background: 'linear-gradient(90deg, #7C3AED 0%, #6B21A8 100%)',
+                  color: '#FFFFFF',
+                  '&:hover': {
+                    background: 'linear-gradient(90deg, #6D28D9 0%, #5B21B6 100%)',
+                  },
+                }}
+              >
+                📋 View Audit Trail
+              </Button>
             </AccordionSection>
           )}
         </Stack>
@@ -662,6 +673,16 @@ export const InterviewDetailModal = ({
         variant="danger"
         isLoading={isDeleting}
       />
+
+      {/* Audit Trail Drawer */}
+      {interview && (
+        <ResourceAuditDrawer
+          open={showAuditDrawer}
+          onClose={() => setShowAuditDrawer(false)}
+          resourceType="interview"
+          resourceId={interview.id}
+        />
+      )}
     </Dialog>
   );
 };

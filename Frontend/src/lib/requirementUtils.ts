@@ -111,16 +111,8 @@ export const getSLAStatus = (createdAt: string, currentStatus: string): { status
   return { status: 'On Track', icon: '✓', color: 'text-green-600' };
 };
 
-/**
- * Format date for display
- */
-export const formatDate = (date: string): string => {
-  return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
-};
+// Re-export from dateFormatter to centralize date/time formatting
+export { formatDate } from './dateFormatter';
 
 /**
  * Export requirements to CSV

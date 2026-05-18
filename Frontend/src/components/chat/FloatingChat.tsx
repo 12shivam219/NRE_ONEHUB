@@ -35,26 +35,28 @@ export const FloatingChat = ({ position = 'bottom-right' }: FloatingChatProps) =
       {/* Floating Button */}
       <Box sx={positionStyles}>
         <Tooltip title={isOpen ? 'Close chat' : 'Open AI Assistant'}>
-          <Badge
-            badgeContent={hasUnreadMessages ? messages.filter(m => m.role === 'assistant').length : 0}
-            color="primary"
-          >
-            <Fab
+          <div>
+            <Badge
+              badgeContent={hasUnreadMessages ? messages.filter(m => m.role === 'assistant').length : 0}
               color="primary"
-              aria-label="chat"
-              onClick={() => setIsOpen(!isOpen)}
-              sx={{
-                width: 56,
-                height: 56,
-                '&:hover': {
-                  transform: 'scale(1.1)',
-                },
-                transition: 'transform 0.2s ease-in-out',
-              }}
             >
-              {isOpen ? <X /> : <MessageSquare />}
-            </Fab>
-          </Badge>
+              <Fab
+                color="primary"
+                aria-label="chat"
+                onClick={() => setIsOpen(!isOpen)}
+                sx={{
+                  width: 56,
+                  height: 56,
+                  '&:hover': {
+                    transform: 'scale(1.1)',
+                  },
+                  transition: 'transform 0.2s ease-in-out',
+                }}
+              >
+                {isOpen ? <X /> : <MessageSquare />}
+              </Fab>
+            </Badge>
+          </div>
         </Tooltip>
       </Box>
 

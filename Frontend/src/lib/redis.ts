@@ -151,11 +151,15 @@ export const generateRequirementsCacheKey = (params: {
   pageSize: number;
   search?: string;
   status?: string;
+  dateFrom?: string;
+  dateTo?: string;
   minRate?: string;
   maxRate?: string;
   remoteFilter?: string;
   sortBy?: string;
   sortOrder?: string;
+  cursorCreatedAt?: string;
+  cursorDirection?: 'after' | 'before';
 }) => {
   const sorted = Object.keys(params)
     .sort()

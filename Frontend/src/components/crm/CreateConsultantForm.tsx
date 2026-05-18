@@ -156,13 +156,10 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [showProjectForm, setShowProjectForm] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [animationDirection, setAnimationDirection] = useState<'forward' | 'backward'>('forward');
-  const [showMoreBackground, setShowMoreBackground] = useState(false);
-  const [showMoreAdditional, setShowMoreAdditional] = useState(false);
 
   const [formData, setFormData] = useState({
     status: 'Active',
@@ -205,6 +202,22 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
     currently_working: false,
     description: '',
   });
+
+  const toMonthInputValue = (value?: string) => {
+    const raw = String(value || '').trim();
+    const match = raw.match(/^(\d{4})-(\d{2})/);
+    if (!match) return '';
+    return `${match[1]}-${match[2]}`;
+  };
+
+  const formatMonthYear = (value?: string) => {
+    const monthValue = toMonthInputValue(value);
+    if (!monthValue) return '-';
+    const [year, month] = monthValue.split('-');
+    const date = new Date(Number(year), Number(month) - 1, 1);
+    if (Number.isNaN(date.getTime())) return monthValue;
+    return date.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+  };
 
   const steps: WizardStep[] = useMemo(
     () => [
@@ -328,7 +341,10 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
           title: 'Consultant Added',
           message: 'New consultant has been successfully added',
         });
-        onSuccess();
+        // Wait a moment for realtime events to propagate before closing
+        setTimeout(() => {
+          onSuccess();
+        }, 500);
       } else {
         setSubmitError(result.error || 'Failed to add consultant');
         showToast({
@@ -368,7 +384,6 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
         currently_working: false,
         description: '',
       });
-      setShowProjectForm(false);
     }
   };
 
@@ -550,19 +565,14 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
             ]}
           />
           <FormField label="Expected Rate" name="expected_rate" value={formData.expected_rate} onChange={handleChange} error={formErrors.expected_rate} />
-          <Button type="button" variant="text" color="inherit" onClick={() => setShowMoreBackground(prev => !prev)} sx={{ justifySelf: 'start', px: 0 }}>
-            {showMoreBackground ? 'Hide extra background details' : 'Add more background details'}
-          </Button>
-          {showMoreBackground && (
-            <>
-              <FormField label="University" name="university" value={formData.university} onChange={handleChange} />
-              <FormField label="Year of Passing" name="year_of_passing" type="number" value={formData.year_of_passing} onChange={handleChange} />
-              <FormField label="Country of Origin" name="country_of_origin" value={formData.country_of_origin} onChange={handleChange} />
-              <FormField label="How Got Visa" name="how_got_visa" value={formData.how_got_visa} onChange={handleChange} />
-              <FormField label="Year Came to US" name="year_came_to_us" type="number" value={formData.year_came_to_us} onChange={handleChange} />
-              <FormField label="SSN (last 4)" name="ssn" value={formData.ssn} onChange={handleChange} />
-            </>
-          )}
+          <>
+            <FormField label="University" name="university" value={formData.university} onChange={handleChange} />
+            <FormField label="Year of Passing" name="year_of_passing" type="number" value={formData.year_of_passing} onChange={handleChange} />
+            <FormField label="Country of Origin" name="country_of_origin" value={formData.country_of_origin} onChange={handleChange} />
+            <FormField label="How Got Visa" name="how_got_visa" value={formData.how_got_visa} onChange={handleChange} />
+            <FormField label="Year Came to US" name="year_came_to_us" type="number" value={formData.year_came_to_us} onChange={handleChange} />
+            <FormField label="SSN (last 4)" name="ssn" value={formData.ssn} onChange={handleChange} />
+          </>
         </>
       )}
 
@@ -603,11 +613,7 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
           />
           <FormField label="Payroll Company" name="payroll_company" value={formData.payroll_company} onChange={handleChange} />
           <FormField label="Payroll Contact Info" name="payroll_contact_info" value={formData.payroll_contact_info} onChange={handleChange} />
-          <Button type="button" variant="text" color="inherit" onClick={() => setShowMoreAdditional(prev => !prev)} sx={{ justifySelf: 'start', px: 0 }}>
-            {showMoreAdditional ? 'Hide project details' : 'Add project details'}
-          </Button>
-
-          {showMoreAdditional && projects.length > 0 && (
+          {projects.length > 0 && (
             <div style={{ display: 'grid', rowGap: '12px' }}>
               {projects.map(project => (
                 <Paper key={project.id} variant="outlined" sx={{ p: 2, borderRadius: '10px' }}>
@@ -619,6 +625,9 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
                       <Typography variant="body2" color="text.secondary">
                         {project.domain} {project.city ? `• ${project.city}` : ''}
                       </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Start: {formatMonthYear(project.start_date)} • End: {project.currently_working ? 'Present' : formatMonthYear(project.end_date)}
+                      </Typography>
                     </Box>
                     <IconButton type="button" onClick={() => handleRemoveProject(project.id)} color="error" aria-label="Remove project">
                       <Trash2 className="w-4 h-4" />
@@ -629,36 +638,47 @@ export const CreateConsultantForm = ({ onClose, onSuccess }: CreateConsultantFor
             </div>
           )}
 
-          {showMoreAdditional && !showProjectForm ? (
-            <Button type="button" variant="outlined" onClick={() => setShowProjectForm(true)}>
-              Add Project
-            </Button>
-          ) : showMoreAdditional ? (
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: '10px', backgroundColor: '#F9FAFB' }}>
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2, mb: 2 }}>
-                <TextField label="Project Name" name="name" value={projectForm.name} onChange={handleProjectFormChange} size="small" fullWidth />
-                <TextField label="Domain" name="domain" value={projectForm.domain} onChange={handleProjectFormChange} size="small" fullWidth />
-                <TextField label="City" name="city" value={projectForm.city} onChange={handleProjectFormChange} size="small" fullWidth />
-                <TextField label="State" name="state" value={projectForm.state} onChange={handleProjectFormChange} size="small" fullWidth />
-                <TextField label="Start Date" type="date" name="start_date" value={projectForm.start_date} onChange={handleProjectFormChange} size="small" fullWidth InputLabelProps={{ shrink: true }} />
-                <TextField label="End Date" type="date" name="end_date" disabled={projectForm.currently_working} value={projectForm.end_date} onChange={handleProjectFormChange} size="small" fullWidth InputLabelProps={{ shrink: true }} />
-                <FormControlLabel
-                  control={<Checkbox name="currently_working" checked={projectForm.currently_working} onChange={handleProjectFormChange} />}
-                  label="Currently Working"
-                />
-                <TextField label="Description" name="description" value={projectForm.description} onChange={handleProjectFormChange} size="small" fullWidth multiline rows={3} />
-              </Box>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: '10px', backgroundColor: '#F9FAFB' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2, mb: 2 }}>
+              <TextField label="Project Name" name="name" value={projectForm.name} onChange={handleProjectFormChange} size="small" fullWidth />
+              <TextField label="Domain" name="domain" value={projectForm.domain} onChange={handleProjectFormChange} size="small" fullWidth />
+              <TextField label="City" name="city" value={projectForm.city} onChange={handleProjectFormChange} size="small" fullWidth />
+              <TextField label="State" name="state" value={projectForm.state} onChange={handleProjectFormChange} size="small" fullWidth />
+              <TextField label="Start Month" type="month" name="start_date" value={toMonthInputValue(projectForm.start_date)} onChange={handleProjectFormChange} size="small" fullWidth InputLabelProps={{ shrink: true }} />
+              <TextField label="End Month" type="month" name="end_date" disabled={projectForm.currently_working} value={toMonthInputValue(projectForm.end_date)} onChange={handleProjectFormChange} size="small" fullWidth InputLabelProps={{ shrink: true }} />
+              <FormControlLabel
+                control={<Checkbox name="currently_working" checked={projectForm.currently_working} onChange={handleProjectFormChange} />}
+                label="Currently Working"
+              />
+              <TextField label="Description" name="description" value={projectForm.description} onChange={handleProjectFormChange} size="small" fullWidth multiline rows={3} />
+            </Box>
 
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                <Button type="button" variant="contained" onClick={handleAddProject} sx={{ flex: 1 }}>
-                  Save Project
-                </Button>
-                <Button type="button" variant="outlined" color="inherit" onClick={() => setShowProjectForm(false)} sx={{ flex: 1 }}>
-                  Cancel
-                </Button>
-              </Stack>
-            </Paper>
-          ) : null}
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <Button type="button" variant="contained" onClick={handleAddProject} sx={{ flex: 1 }}>
+                Save Project
+              </Button>
+              <Button
+                type="button"
+                variant="outlined"
+                color="inherit"
+                onClick={() =>
+                  setProjectForm({
+                    name: '',
+                    domain: '',
+                    city: '',
+                    state: '',
+                    start_date: '',
+                    end_date: '',
+                    currently_working: false,
+                    description: '',
+                  })
+                }
+                sx={{ flex: 1 }}
+              >
+                Clear
+              </Button>
+            </Stack>
+          </Paper>
         </>
       )}
     </Box>

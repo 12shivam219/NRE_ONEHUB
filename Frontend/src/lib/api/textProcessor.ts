@@ -190,6 +190,17 @@ class TextProcessorAPI {
       bookmarks: string[];
       count: number;
       filename: string;
+      auto_created?: boolean;
+      created_count?: number;
+      reference_path?: string | null;
+      matches?: Array<{
+        bookmark: string;
+        created: boolean;
+        score: number;
+        reason: string;
+        target_text?: string;
+      }>;
+      message?: string | null;
     }>
   > {
     const formData = new FormData();

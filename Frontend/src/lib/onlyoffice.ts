@@ -32,6 +32,7 @@ export interface OnlyOfficeConfig {
   };
   events?: Record<string, unknown>;
   height: string;
+  token?: string;
   type: 'desktop';
   width: string;
 }
@@ -63,6 +64,12 @@ export const getOnlyOfficeDocumentServerUrl = () =>
   normalizeDocumentServerUrl(import.meta.env.VITE_ONLYOFFICE_DOCUMENT_SERVER_URL);
 
 export const isOnlyOfficeConfigured = () => getOnlyOfficeDocumentServerUrl().length > 0;
+
+const isTruthyEnvValue = (value: unknown) =>
+  typeof value === 'string' && ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+
+export const isOnlyOfficeJwtDisabled = () =>
+  isTruthyEnvValue(import.meta.env.VITE_ONLYOFFICE_DISABLE_JWT);
 
 export const getOnlyOfficeFileType = (doc: Document) => {
   const fileName = (doc.original_filename || doc.filename || '').toLowerCase();

@@ -3,6 +3,7 @@ import { useAuth } from './useAuth';
 import { useToast } from '../contexts/ToastContext';
 import {
   getFolders,
+  getAllFolders,
   createFolder,
   renameFolder,
   deleteFolder,
@@ -13,7 +14,10 @@ import type { Database } from '../lib/database.types';
 
 type Folder = Database['public']['Tables']['folders']['Row'];
 
-export function useFolders(currentFolderId: string | null = null) {
+export function useFolders(
+  currentFolderId: string | null = null,
+  mode: 'children' | 'all' = 'children'
+) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [_isPending, startTransition] = useTransition();
@@ -30,7 +34,10 @@ export function useFolders(currentFolderId: string | null = null) {
     setLoading(true);
     setError(null);
 
-    const result = await getFolders(user.id, currentFolderId);
+    const result =
+      mode === 'all'
+        ? await getAllFolders(user.id)
+        : await getFolders(user.id, currentFolderId);
 
     if (result.success) {
       setFolders(result.folders || []);
@@ -44,7 +51,7 @@ export function useFolders(currentFolderId: string | null = null) {
     }
 
     setLoading(false);
-  }, [user, currentFolderId, showToast]);
+  }, [user, currentFolderId, mode, showToast]);
 
   // Load breadcrumb path
   const loadBreadcrumb = useCallback(async () => {
@@ -72,7 +79,8 @@ export function useFolders(currentFolderId: string | null = null) {
       void loadFolders();
       void loadBreadcrumb();
     });
-  }, [loadFolders, loadBreadcrumb, startTransition]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, currentFolderId]);
 
   // Create new folder
   const createNewFolder = useCallback(

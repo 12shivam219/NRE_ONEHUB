@@ -322,42 +322,48 @@ export const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
           />
 
           <Tooltip title={isListening ? 'Stop listening' : 'Start voice input'}>
-            <IconButton
-              size="small"
-              onClick={handleVoiceInput}
-              color={isListening ? 'warning' : 'default'}
-              disabled={isLoading}
-            >
-              {isListening ? <MicOff size={20} /> : <Mic size={20} />}
-            </IconButton>
+            <div>
+              <IconButton
+                size="small"
+                onClick={handleVoiceInput}
+                color={isListening ? 'warning' : 'default'}
+                disabled={isLoading}
+              >
+                {isListening ? <MicOff size={20} /> : <Mic size={20} />}
+              </IconButton>
+            </div>
           </Tooltip>
 
           <Tooltip title={autoPlayVoice ? 'Disable voice response' : 'Enable voice response'}>
-            <IconButton
-              size="small"
-              onClick={toggleVoicePlayback}
-              color={autoPlayVoice ? 'primary' : 'default'}
-              disabled={!ttsSupported}
-            >
-              {autoPlayVoice && !isSpeaking ? (
-                <Volume2 size={20} />
-              ) : isSpeaking ? (
-                <VolumeX size={20} />
-              ) : (
-                <VolumeX size={20} />
-              )}
-            </IconButton>
+            <div>
+              <IconButton
+                size="small"
+                onClick={toggleVoicePlayback}
+                color={autoPlayVoice ? 'primary' : 'default'}
+                disabled={!ttsSupported}
+              >
+                {autoPlayVoice && !isSpeaking ? (
+                  <Volume2 size={20} />
+                ) : isSpeaking ? (
+                  <VolumeX size={20} />
+                ) : (
+                  <VolumeX size={20} />
+                )}
+              </IconButton>
+            </div>
           </Tooltip>
 
           <Tooltip title="Send message">
-            <IconButton
-              size="small"
-              onClick={handleSendMessage}
-              color="primary"
-              disabled={isLoading || !inputValue.trim()}
-            >
-              <Send size={20} />
-            </IconButton>
+            <div>
+              <IconButton
+                size="small"
+                onClick={handleSendMessage}
+                color="primary"
+                disabled={isLoading || !inputValue.trim()}
+              >
+                <Send size={20} />
+              </IconButton>
+            </div>
           </Tooltip>
         </Stack>
       </Box>

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Download, X, FileText, Table2 } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
 import { getRequirementsPage } from '../../lib/api/requirements';
+import { getInterviewsByRequirementIdsPage } from '../../lib/api/interviews';
 import { useToast } from '../../contexts/ToastContext';
 import { calculateDaysOpen } from '../../lib/requirementUtils';
 import type { Database } from '../../lib/database.types';
@@ -23,11 +23,21 @@ import TextField from '@mui/material/TextField';
 import Paper from '@mui/material/Paper';
 
 type Requirement = Database['public']['Tables']['requirements']['Row'];
+type Interview = Database['public']['Tables']['interviews']['Row'];
+const CSV_EXPORT_BATCH_SIZE = 1000;
+const INTERVIEW_EXPORT_BATCH_SIZE = 1000;
+const INTERVIEW_EXPORT_MAX_ROWS = 50000;
+const INTERVIEW_REQUIREMENT_ID_CHUNK_SIZE = 100;
+const PDF_EXPORT_MAX_ROWS = 2000;
+const PDF_INTERVIEW_SUMMARY_MAX_ROWS = 50000;
 
 interface ExportOptionsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onExport: (opts: { columns: string[]; format: 'csv' | 'pdf' }) => void;
+  onExport: (opts: { columns: string[]; format: 'csv' | 'pdf'; scope: 'all' | 'filtered'; exportTarget: 'requirements_only' | 'requirements_and_interviews' | 'interviews_only' }) => void;
+  estimatedRows: number | null;
+  isEstimatingRows: boolean;
+  onScopeChange: (scope: 'all' | 'filtered') => void;
 }
 
 const CSV_COLUMNS = [
@@ -47,10 +57,40 @@ const CSV_COLUMNS = [
   'created_at',
 ];
 
-export const ExportOptionsModal = ({ isOpen, onClose, onExport }: ExportOptionsModalProps) => {
+const DEFAULT_SELECTED_COLUMNS = CSV_COLUMNS.filter((column) => column !== 'id');
+const INTERVIEW_EXPORT_COLUMNS = [
+  'requirement_number',
+  'interview_id',
+  'scheduled_date',
+  'scheduled_time',
+  'status',
+  'round',
+  'interviewer',
+  'interview_with',
+  'result',
+  'mode',
+  'duration_minutes',
+  'notes',
+  'created_at',
+] as const;
+
+type InterviewExportColumn = typeof INTERVIEW_EXPORT_COLUMNS[number];
+
+export const ExportOptionsModal = ({
+  isOpen,
+  onClose,
+  onExport,
+  estimatedRows,
+  isEstimatingRows,
+  onScopeChange,
+}: ExportOptionsModalProps) => {
   const { showToast } = useToast();
-  const [selectedColumns, setSelectedColumns] = useState<string[]>(CSV_COLUMNS);
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(DEFAULT_SELECTED_COLUMNS);
   const [exportFormat, setExportFormat] = useState<'csv' | 'pdf'>('csv');
+  const [exportScope, setExportScope] = useState<'all' | 'filtered'>('all');
+  const [exportTarget, setExportTarget] = useState<'requirements_only' | 'requirements_and_interviews' | 'interviews_only'>('requirements_only');
+  const isInterviewsOnly = exportTarget === 'interviews_only';
+  const includeInterviews = exportTarget === 'requirements_and_interviews';
 
   const handleColumnToggle = (column: string) => {
     setSelectedColumns(prev =>
@@ -69,7 +109,7 @@ export const ExportOptionsModal = ({ isOpen, onClose, onExport }: ExportOptionsM
   };
 
   const handleExportCSV = () => {
-    if (selectedColumns.length === 0) {
+    if (!isInterviewsOnly && selectedColumns.length === 0) {
       showToast({
         type: 'error',
         title: 'No columns selected',
@@ -78,11 +118,19 @@ export const ExportOptionsModal = ({ isOpen, onClose, onExport }: ExportOptionsM
       return;
     }
 
-    onExport({ columns: selectedColumns, format: 'csv' });
+    onExport({ columns: selectedColumns, format: 'csv', scope: exportScope, exportTarget });
     onClose();
   };
 
   const handleExportPDF = () => {
+    if (isInterviewsOnly) {
+      showToast({
+        type: 'error',
+        title: 'Invalid PDF option',
+        message: 'Interviews-only export is available in CSV format only.',
+      });
+      return;
+    }
     if (selectedColumns.length === 0) {
       showToast({
         type: 'error',
@@ -92,7 +140,7 @@ export const ExportOptionsModal = ({ isOpen, onClose, onExport }: ExportOptionsM
       return;
     }
 
-    onExport({ columns: selectedColumns, format: 'pdf' });
+    onExport({ columns: selectedColumns, format: 'pdf', scope: exportScope, exportTarget });
     onClose();
   };
 
@@ -131,18 +179,77 @@ export const ExportOptionsModal = ({ isOpen, onClose, onExport }: ExportOptionsM
               />
               <FormControlLabel
                 value="pdf"
-                control={<Radio />}
+                control={<Radio disabled={isInterviewsOnly} />}
                 label={
-                  <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
                     <FileText className="w-4 h-4" />
                     <span>PDF (Print)</span>
+                    <Typography component="span" variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>
+                      Max {PDF_EXPORT_MAX_ROWS.toLocaleString()} rows
+                    </Typography>
                   </Stack>
                 }
               />
             </RadioGroup>
+            {isInterviewsOnly && (
+              <Typography variant="caption" sx={{ color: 'warning.dark', display: 'block', mt: 0.5 }}>
+                Interviews-only export supports CSV only.
+              </Typography>
+            )}
+          </Box>
+
+          {/* Scope Selection */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>
+              Export Scope
+            </Typography>
+            <RadioGroup
+              value={exportScope}
+              onChange={(e) => {
+                const nextScope = e.target.value as 'all' | 'filtered';
+                setExportScope(nextScope);
+                onScopeChange(nextScope);
+              }}
+            >
+              <FormControlLabel value="all" control={<Radio />} label="All requirements" />
+              <FormControlLabel value="filtered" control={<Radio />} label="Only filtered results (active filters/date range)" />
+            </RadioGroup>
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>
+              Export Data
+            </Typography>
+            <RadioGroup
+              value={exportTarget}
+              onChange={(e) => {
+                const target = e.target.value as 'requirements_only' | 'requirements_and_interviews' | 'interviews_only';
+                setExportTarget(target);
+                if (target === 'interviews_only' && exportFormat === 'pdf') {
+                  setExportFormat('csv');
+                }
+              }}
+            >
+              <FormControlLabel value="requirements_only" control={<Radio />} label="Requirements only" />
+              <FormControlLabel value="requirements_and_interviews" control={<Radio />} label="Requirements + Interviews" />
+              <FormControlLabel value="interviews_only" control={<Radio />} label="Interviews only" />
+            </RadioGroup>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', pl: 4 }}>
+              {exportTarget === 'requirements_only'
+                ? 'Exports a single requirements file.'
+                : exportTarget === 'requirements_and_interviews'
+                  ? 'Exports requirements plus a second interviews CSV file.'
+                  : 'Exports only the interviews CSV file.'}
+            </Typography>
+            {exportFormat === 'pdf' && includeInterviews && (
+              <Typography variant="caption" sx={{ color: 'warning.dark', display: 'block', pl: 4, mt: 0.5 }}>
+                PDF uses interview summary only for stability. Use CSV for full interview details.
+              </Typography>
+            )}
           </Box>
 
           {/* Column Selection */}
+          {!isInterviewsOnly && (
           <Box>
             <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
@@ -170,15 +277,28 @@ export const ExportOptionsModal = ({ isOpen, onClose, onExport }: ExportOptionsM
               </Box>
             </Paper>
           </Box>
+          )}
 
           {/* Summary */}
           <Paper variant="outlined" sx={{ p: 2, bgcolor: 'rgba(212,175,55,0.08)' }}>
             <Stack spacing={1}>
               <Typography variant="body2">
-                You are about to export requirements with <strong>{selectedColumns.length}</strong> columns.
+                {isInterviewsOnly
+                  ? 'You are about to export interviews only.'
+                  : <>You are about to export requirements with <strong>{selectedColumns.length}</strong> columns.</>}
+              </Typography>
+              <Typography variant="body2">
+                Rows to export:{' '}
+                <strong>
+                  {isEstimatingRows
+                    ? 'calculating...'
+                    : (estimatedRows ?? 0).toLocaleString()}
+                </strong>
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                💡 <strong>Tip:</strong> Leave the date range empty in the report to export all data. If you set a date range before opening this dialog, only data within that range will be exported.
+                💡 <strong>Tip:</strong> {exportScope === 'all'
+                  ? 'CSV includes all requirements from the database. PDF is safety-limited for browser stability.'
+                  : 'Export uses your active search/filters/date range from this report. PDF is safety-limited for browser stability.'}
               </Typography>
             </Stack>
           </Paper>
@@ -207,15 +327,30 @@ export const ExportOptionsModal = ({ isOpen, onClose, onExport }: ExportOptionsM
 
 interface RequirementsReportProps {
   onClose: () => void;
+  initialFilters?: {
+    search: string;
+    status: string | 'ALL';
+    minRate?: string;
+    maxRate?: string;
+    remoteFilter?: 'ALL' | 'REMOTE' | 'ONSITE';
+    sortBy: 'date' | 'company' | 'daysOpen';
+    sortOrder: 'asc' | 'desc';
+  };
+  initialDateRange?: {
+    start: string;
+    end: string;
+  };
 }
 
-export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
-  const { user } = useAuth();
+export const RequirementsReport = ({ onClose, initialFilters, initialDateRange }: RequirementsReportProps) => {
   const { showToast } = useToast();
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [dateRange, setDateRange] = useState({
+    start: initialDateRange?.start || '',
+    end: initialDateRange?.end || '',
+  });
 
   const [page, setPage] = useState(0);
   const [hasNextPage, setHasNextPage] = useState(true);
@@ -224,6 +359,20 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportedRows, setExportedRows] = useState(0);
   const exportCancelRef = useRef(false);
+  const [estimatedRows, setEstimatedRows] = useState<number | null>(null);
+  const [isEstimatingRows, setIsEstimatingRows] = useState(false);
+
+  const orderByColumn = useMemo(() => {
+    if (initialFilters?.sortBy === 'company') return 'implementation_partner';
+    return 'created_at';
+  }, [initialFilters?.sortBy]);
+
+  const orderDir = initialFilters?.sortOrder || 'desc';
+  const activeSearch = initialFilters?.search || '';
+  const activeStatus = initialFilters?.status || 'ALL';
+  const activeMinRate = initialFilters?.minRate || undefined;
+  const activeMaxRate = initialFilters?.maxRate || undefined;
+  const activeRemoteFilter = initialFilters?.remoteFilter || 'ALL';
 
   const dateFromIso = useMemo(() => (dateRange.start ? new Date(`${dateRange.start}T00:00:00`).toISOString() : undefined), [dateRange.start]);
   const dateToIso = useMemo(() => (dateRange.end ? new Date(`${dateRange.end}T23:59:59.999`).toISOString() : undefined), [dateRange.end]);
@@ -240,6 +389,22 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
     URL.revokeObjectURL(url);
   }, []);
 
+  type SaveFilePickerWindow = Window & {
+    showSaveFilePicker?: (options?: {
+      suggestedName?: string;
+      types?: Array<{
+        description?: string;
+        accept: Record<string, string[]>;
+      }>;
+    }) => Promise<{
+      createWritable: () => Promise<{
+        write: (data: BlobPart) => Promise<void>;
+        close: () => Promise<void>;
+        abort?: () => Promise<void>;
+      }>;
+    }>;
+  };
+
   const csvEscape = useCallback((value: unknown) => {
     if (value === null || value === undefined) return '';
     const s = String(value);
@@ -249,18 +414,45 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
     return s;
   }, []);
 
+  const getInterviewExportValue = useCallback((
+    interview: Interview,
+    column: InterviewExportColumn,
+    requirementNumberById: Map<string, string>
+  ): unknown => {
+    if (column === 'requirement_number') {
+      return requirementNumberById.get(interview.requirement_id) || '';
+    }
+    if (column === 'interview_id') {
+      return interview.interview_number || '';
+    }
+    return interview[column as keyof Interview];
+  }, []);
+
+  const htmlEscape = useCallback((value: unknown) => {
+    if (value === null || value === undefined) return '-';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }, []);
+
   const loadRequirements = useCallback(async (opts?: { newPage?: number }) => {
-    if (!user) return;
     const requestedPage = opts?.newPage ?? page;
     setLoading(true);
     const result = await getRequirementsPage({
-      userId: user.id,
       limit: pageSize,
       offset: requestedPage * pageSize,
       dateFrom: dateFromIso,
       dateTo: dateToIso,
-      orderBy: 'created_at',
-      orderDir: 'desc',
+      orderBy: orderByColumn,
+      orderDir,
+      search: activeSearch || undefined,
+      status: activeStatus || undefined,
+      minRate: activeMinRate,
+      maxRate: activeMaxRate,
+      remoteFilter: activeRemoteFilter,
       includeCount: false,
     });
     if (result.success && result.requirements) {
@@ -270,7 +462,7 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
       showToast({ type: 'error', title: 'Failed to load requirements', message: result.error });
     }
     setLoading(false);
-  }, [user, showToast, page, pageSize, dateFromIso, dateToIso]);
+  }, [showToast, page, pageSize, dateFromIso, dateToIso, orderByColumn, orderDir, activeSearch, activeStatus, activeMinRate, activeMaxRate, activeRemoteFilter]);
 
   useEffect(() => {
     loadRequirements({ newPage: page });
@@ -294,14 +486,221 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
     };
   }, [requirements]);
 
-  const handleExport = useCallback(async (opts: { columns: string[]; format: 'csv' | 'pdf' }) => {
-    if (!user) return;
+  const streamRequirementsForExport = useCallback(async (
+    scope: 'all' | 'filtered',
+    onBatch: (batch: Requirement[]) => Promise<boolean | void> | boolean | void
+  ) => {
+    const limit = CSV_EXPORT_BATCH_SIZE;
+    let offset = 0;
+    let totalRows = 0;
 
-    if (opts.format === 'pdf') {
+    while (true) {
+      if (exportCancelRef.current) {
+        showToast({ type: 'info', title: 'Export canceled', message: 'Export was canceled.' });
+        return null;
+      }
+
+      const res = await getRequirementsPage({
+        limit,
+        offset,
+        dateFrom: scope === 'filtered' ? dateFromIso : undefined,
+        dateTo: scope === 'filtered' ? dateToIso : undefined,
+        orderBy: orderByColumn,
+        orderDir,
+        search: scope === 'filtered' ? (activeSearch || undefined) : undefined,
+        status: scope === 'filtered' ? (activeStatus || undefined) : undefined,
+        minRate: scope === 'filtered' ? activeMinRate : undefined,
+        maxRate: scope === 'filtered' ? activeMaxRate : undefined,
+        remoteFilter: scope === 'filtered' ? activeRemoteFilter : undefined,
+        includeCount: false,
+      });
+
+      if (!res.success || !res.requirements) {
+        throw new Error(res.error || 'Failed to export requirements');
+      }
+
+      const batch = res.requirements;
+      if (batch.length === 0) break;
+
+      const shouldContinue = await onBatch(batch);
+      totalRows += batch.length;
+      setExportedRows(totalRows);
+      if (shouldContinue === false) break;
+
+      if (batch.length < limit) break;
+      offset += limit;
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    }
+
+    return totalRows;
+  }, [showToast, dateFromIso, dateToIso, orderByColumn, orderDir, activeSearch, activeStatus, activeMinRate, activeMaxRate, activeRemoteFilter]);
+
+  const streamInterviewsForRequirementIds = useCallback(async (
+    requirementIds: string[],
+    onBatch: (batch: Interview[]) => Promise<boolean | void> | boolean | void
+  ) => {
+    if (requirementIds.length === 0) return 0;
+    let totalRows = 0;
+    for (let i = 0; i < requirementIds.length; i += INTERVIEW_REQUIREMENT_ID_CHUNK_SIZE) {
+      const requirementIdChunk = requirementIds.slice(i, i + INTERVIEW_REQUIREMENT_ID_CHUNK_SIZE);
+      let offset = 0;
+      while (true) {
+        if (exportCancelRef.current) return null;
+        const res = await getInterviewsByRequirementIdsPage({
+          requirementIds: requirementIdChunk,
+          limit: INTERVIEW_EXPORT_BATCH_SIZE,
+          offset,
+        });
+        if (!res.success || !res.interviews) {
+          throw new Error(res.error || 'Failed to export interviews');
+        }
+        const batch = res.interviews as Interview[];
+        if (batch.length === 0) break;
+        const shouldContinue = await onBatch(batch);
+        totalRows += batch.length;
+        if (shouldContinue === false) return totalRows;
+        if (batch.length < INTERVIEW_EXPORT_BATCH_SIZE) break;
+        offset += INTERVIEW_EXPORT_BATCH_SIZE;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+    }
+    return totalRows;
+  }, []);
+
+  const estimateExportRows = useCallback(async (scope: 'all' | 'filtered') => {
+    const res = await getRequirementsPage({
+      limit: 1,
+      offset: 0,
+      dateFrom: scope === 'filtered' ? dateFromIso : undefined,
+      dateTo: scope === 'filtered' ? dateToIso : undefined,
+      orderBy: orderByColumn,
+      orderDir,
+      search: scope === 'filtered' ? (activeSearch || undefined) : undefined,
+      status: scope === 'filtered' ? (activeStatus || undefined) : undefined,
+      minRate: scope === 'filtered' ? activeMinRate : undefined,
+      maxRate: scope === 'filtered' ? activeMaxRate : undefined,
+      remoteFilter: scope === 'filtered' ? activeRemoteFilter : undefined,
+      includeCount: true,
+    });
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to estimate export rows');
+    }
+    return res.total ?? res.requirements?.length ?? 0;
+  }, [
+    dateFromIso,
+    dateToIso,
+    orderByColumn,
+    orderDir,
+    activeSearch,
+    activeStatus,
+    activeMinRate,
+    activeMaxRate,
+    activeRemoteFilter,
+  ]);
+
+  const requestExportEstimate = useCallback(async (scope: 'all' | 'filtered') => {
+    setIsEstimatingRows(true);
+    try {
+      const count = await estimateExportRows(scope);
+      setEstimatedRows(count);
+    } catch {
+      setEstimatedRows(null);
+    } finally {
+      setIsEstimatingRows(false);
+    }
+  }, [estimateExportRows]);
+
+  const openExportModal = useCallback(() => {
+    setShowExportModal(true);
+    void requestExportEstimate('all');
+  }, [requestExportEstimate]);
+
+  const handleExport = useCallback(async (opts: { columns: string[]; format: 'csv' | 'pdf'; scope: 'all' | 'filtered'; exportTarget: 'requirements_only' | 'requirements_and_interviews' | 'interviews_only' }) => {
+    exportCancelRef.current = false;
+    setIsExporting(true);
+    setExportedRows(0);
+
+    try {
       const selectedColumns = opts.columns;
-      const previewRequirements = requirements;
+      const today = new Date().toISOString().split('T')[0];
+      const exportRequirements = opts.exportTarget !== 'interviews_only';
+      const exportInterviews = opts.exportTarget !== 'requirements_only';
 
-      const htmlContent = `
+      if (opts.format === 'pdf') {
+        if (!exportRequirements) {
+          showToast({
+            type: 'error',
+            title: 'Invalid export option',
+            message: 'Interviews-only export is available in CSV format only.',
+          });
+          return;
+        }
+        const pdfRows: Requirement[] = [];
+        let exceededPdfLimit = false;
+        const interviewSummaryByRequirementId = new Map<string, { count: number; latestStatus: string; latestDate: string }>();
+        let pdfInterviewRowsProcessed = 0;
+        let pdfInterviewSummaryTruncated = false;
+        const totalRows = await streamRequirementsForExport(opts.scope, (batch) => {
+          const remaining = PDF_EXPORT_MAX_ROWS - pdfRows.length;
+          if (remaining <= 0) {
+            exceededPdfLimit = true;
+            return false;
+          }
+          if (batch.length > remaining) {
+            pdfRows.push(...batch.slice(0, remaining));
+            exceededPdfLimit = true;
+            return false;
+          }
+          pdfRows.push(...batch);
+        });
+        if (totalRows === null) return;
+
+        if (exceededPdfLimit) {
+          showToast({
+            type: 'error',
+            title: 'PDF export too large',
+            message: `PDF export is limited to ${PDF_EXPORT_MAX_ROWS.toLocaleString()} rows to prevent browser crashes. Use CSV for full export.`,
+          });
+          return;
+        }
+
+        if (exportInterviews && pdfRows.length > 0) {
+          const requirementIds = pdfRows.map((row) => row.id);
+          await streamInterviewsForRequirementIds(requirementIds, (interviewBatch) => {
+            const remaining = PDF_INTERVIEW_SUMMARY_MAX_ROWS - pdfInterviewRowsProcessed;
+            if (remaining <= 0) {
+              pdfInterviewSummaryTruncated = true;
+              return false;
+            }
+            const exportBatch = interviewBatch.slice(0, remaining);
+            for (const interview of exportBatch) {
+              const key = interview.requirement_id;
+              const current = interviewSummaryByRequirementId.get(key);
+              const candidateDate = interview.scheduled_date || interview.created_at || '';
+              if (!current) {
+                interviewSummaryByRequirementId.set(key, {
+                  count: 1,
+                  latestStatus: interview.status || '-',
+                  latestDate: candidateDate,
+                });
+                continue;
+              }
+              const shouldReplace = candidateDate > current.latestDate;
+              interviewSummaryByRequirementId.set(key, {
+                count: current.count + 1,
+                latestStatus: shouldReplace ? (interview.status || '-') : current.latestStatus,
+                latestDate: shouldReplace ? candidateDate : current.latestDate,
+              });
+            }
+            pdfInterviewRowsProcessed += exportBatch.length;
+            if (exportBatch.length < interviewBatch.length) {
+              pdfInterviewSummaryTruncated = true;
+              return false;
+            }
+          });
+        }
+
+        const htmlContent = `
         <!DOCTYPE html>
         <html>
         <head>
@@ -316,24 +715,41 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
           </style>
         </head>
         <body>
-          <h1>Requirements Report (Page ${page + 1})</h1>
+          <h1>Requirements Report</h1>
+          ${exportInterviews && pdfInterviewSummaryTruncated
+            ? `<p style="color:#92400e;background:#fef3c7;border:1px solid #f59e0b;padding:8px;border-radius:6px;">
+                 Interview summary was truncated at ${PDF_INTERVIEW_SUMMARY_MAX_ROWS.toLocaleString()} interview rows for browser stability.
+               </p>`
+            : ''
+          }
           <table>
             <thead>
               <tr>
                 ${selectedColumns.map(col => `<th>${col.replace(/_/g, ' ').toUpperCase()}</th>`).join('')}
+                ${exportInterviews ? '<th>INTERVIEW COUNT</th><th>LATEST INTERVIEW STATUS</th><th>LATEST INTERVIEW DATE</th>' : ''}
               </tr>
             </thead>
             <tbody>
-              ${previewRequirements
+              ${pdfRows
                 .map(req => `
                 <tr>
                   ${selectedColumns
                     .map(col => {
                       const value = req[col as keyof Requirement];
-                      if (col === 'created_at') return `<td>${new Date(value as string).toLocaleDateString()}</td>`;
-                      return `<td>${value ?? '-'}</td>`;
+                      if (col === 'created_at') return `<td>${htmlEscape(new Date(value as string).toLocaleDateString())}</td>`;
+                      return `<td>${htmlEscape(value)}</td>`;
                     })
                     .join('')}
+                  ${exportInterviews
+                    ? (() => {
+                        const summary = interviewSummaryByRequirementId.get(req.id);
+                        const latestDate = summary?.latestDate ? new Date(summary.latestDate).toLocaleDateString() : '-';
+                        const latestStatus = summary?.latestStatus || '-';
+                        const count = summary?.count ?? 0;
+                        return `<td>${count}</td><td>${htmlEscape(latestStatus)}</td><td>${htmlEscape(latestDate)}</td>`;
+                      })()
+                    : ''
+                  }
                 </tr>
               `)
                 .join('')}
@@ -353,69 +769,226 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
       }
 
       showToast({
-        type: 'info',
+        type: 'success',
         title: 'PDF Export',
-        message: 'PDF export is limited to the current page to avoid browser crashes. Use CSV to export all rows.',
+        message: exportInterviews
+          ? `${pdfRows.length} requirements prepared for PDF print with interview summary.`
+          : `${pdfRows.length} requirements prepared for PDF print.`,
       });
       return;
-    }
+      }
 
-    exportCancelRef.current = false;
-    setIsExporting(true);
-    setExportedRows(0);
-
-    try {
-      const limit = 1000;
-      let cursorCreatedAt: string | undefined;
-      let totalExported = 0;
-      const csvParts: BlobPart[] = [];
-
-      csvParts.push(`${opts.columns.join(',')}\n`);
-
-      // Export all data if no date range is selected, otherwise respect the date filters
-      while (true) {
-        if (exportCancelRef.current) {
-          showToast({ type: 'info', title: 'Export canceled', message: 'CSV export was canceled.' });
-          return;
-        }
-
-        const res = await getRequirementsPage({
-          userId: user.id,
-          limit,
-          cursor: cursorCreatedAt ? { created_at: cursorCreatedAt, direction: 'after' } : undefined,
-          dateFrom: dateFromIso, // undefined if no date selected
-          dateTo: dateToIso, // undefined if no date selected
-          orderBy: 'created_at',
-          orderDir: 'desc',
-          includeCount: false,
+      const csvFilename = `requirements_${today}.csv`;
+      const interviewsFilename = `interviews_${today}.csv`;
+      const pickerWindow = window as SaveFilePickerWindow;
+      const canStreamToDisk = typeof pickerWindow.showSaveFilePicker === 'function';
+      const precheck = await getRequirementsPage({
+        limit: 1,
+        offset: 0,
+        dateFrom: opts.scope === 'filtered' ? dateFromIso : undefined,
+        dateTo: opts.scope === 'filtered' ? dateToIso : undefined,
+        orderBy: orderByColumn,
+        orderDir,
+        search: opts.scope === 'filtered' ? (activeSearch || undefined) : undefined,
+        status: opts.scope === 'filtered' ? (activeStatus || undefined) : undefined,
+        minRate: opts.scope === 'filtered' ? activeMinRate : undefined,
+        maxRate: opts.scope === 'filtered' ? activeMaxRate : undefined,
+        remoteFilter: opts.scope === 'filtered' ? activeRemoteFilter : undefined,
+        includeCount: false,
+      });
+      if (!precheck.success) {
+        throw new Error(precheck.error || 'Failed to prepare export');
+      }
+      if (!precheck.requirements || precheck.requirements.length === 0) {
+        showToast({
+          type: 'info',
+          title: 'No data to export',
+          message: opts.scope === 'filtered'
+            ? 'No requirements matched your current filters/date range.'
+            : 'No requirements found to export.',
         });
+        return;
+      }
 
-        if (!res.success || !res.requirements) {
-          throw new Error(res.error || 'Failed to export requirements');
+      if (canStreamToDisk) {
+        type WritableStreamHandle = {
+          write: (data: BlobPart) => Promise<void>;
+          close: () => Promise<void>;
+          abort?: () => Promise<void>;
+        };
+        let writable: WritableStreamHandle | null = null;
+        let interviewWritable: WritableStreamHandle | null = null;
+        let closedRequirementsStream = false;
+        let closedInterviewStream = false;
+        try {
+          if (exportRequirements) {
+            const handle = await pickerWindow.showSaveFilePicker!({
+              suggestedName: csvFilename,
+              types: [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } }],
+            });
+            writable = await handle.createWritable();
+            await writable.write(`${opts.columns.join(',')}\n`);
+          }
+          let interviewRows = 0;
+          let interviewLimitReached = false;
+          if (exportInterviews) {
+            const interviewHandle = await pickerWindow.showSaveFilePicker!({
+              suggestedName: interviewsFilename,
+              types: [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } }],
+            });
+            interviewWritable = await interviewHandle.createWritable();
+            await interviewWritable!.write(`${INTERVIEW_EXPORT_COLUMNS.join(',')}\n`);
+          }
+          const totalRows = await streamRequirementsForExport(opts.scope, async (batch) => {
+            const requirementNumberById = new Map<string, string>(
+              batch.map((req) => [req.id, req.requirement_number ? String(req.requirement_number) : ''])
+            );
+            const lines = batch
+              .map(req => opts.columns.map(col => csvEscape(req[col as keyof Requirement])).join(','))
+              .join('\n');
+            if (writable) {
+              await writable.write(`${lines}\n`);
+            }
+            if (interviewWritable && batch.length > 0 && !interviewLimitReached) {
+              const requirementIds = batch.map((req) => req.id);
+              await streamInterviewsForRequirementIds(requirementIds, async (interviewBatch) => {
+                const remaining = INTERVIEW_EXPORT_MAX_ROWS - interviewRows;
+                if (remaining <= 0) {
+                  interviewLimitReached = true;
+                  return false;
+                }
+                const exportBatch = interviewBatch.slice(0, remaining);
+                const interviewLines = exportBatch
+                  .map((interview) => INTERVIEW_EXPORT_COLUMNS
+                    .map((col) => csvEscape(getInterviewExportValue(interview, col, requirementNumberById)))
+                    .join(','))
+                  .join('\n');
+                await interviewWritable!.write(`${interviewLines}\n`);
+                interviewRows += exportBatch.length;
+                if (exportBatch.length < interviewBatch.length) {
+                  interviewLimitReached = true;
+                  return false;
+                }
+              });
+            }
+          });
+          if (totalRows === null) {
+            if (writable) {
+              await writable.close();
+              closedRequirementsStream = true;
+            }
+            if (interviewWritable) {
+              await interviewWritable.close();
+              closedInterviewStream = true;
+            }
+            return;
+          }
+          if (writable) {
+            await writable.close();
+            closedRequirementsStream = true;
+          }
+          if (interviewWritable) {
+            await interviewWritable.close();
+            closedInterviewStream = true;
+          }
+          showToast({
+            type: 'success',
+            title: 'Export successful',
+            message: exportInterviews && exportRequirements
+              ? interviewLimitReached
+                ? `${totalRows.toLocaleString()} requirements exported. Interviews capped at ${INTERVIEW_EXPORT_MAX_ROWS.toLocaleString()} rows for stability (exported ${interviewRows.toLocaleString()}).`
+                : `${totalRows.toLocaleString()} requirements and ${interviewRows.toLocaleString()} interviews exported to CSV`
+              : exportInterviews
+                ? interviewLimitReached
+                  ? `Interviews exported to CSV (capped at ${INTERVIEW_EXPORT_MAX_ROWS.toLocaleString()} rows, exported ${interviewRows.toLocaleString()}).`
+                  : `${interviewRows.toLocaleString()} interviews exported to CSV`
+                : `${totalRows.toLocaleString()} requirements exported to CSV`,
+          });
+          return;
+        } catch (err) {
+          if ((err as { name?: string }).name === 'AbortError') {
+            showToast({
+              type: 'info',
+              title: 'Export canceled',
+              message: 'File save was canceled.',
+            });
+            return;
+          }
+          throw err;
+        } finally {
+          if (writable && !closedRequirementsStream && typeof writable.abort === 'function') {
+            try {
+              await writable.abort();
+            } catch {
+              // Ignore cleanup errors from partially opened streams.
+            }
+          }
+          if (interviewWritable && !closedInterviewStream && typeof interviewWritable.abort === 'function') {
+            try {
+              await interviewWritable.abort();
+            } catch {
+              // Ignore cleanup errors from partially opened streams.
+            }
+          }
         }
+      }
 
-        const batch = res.requirements;
-        if (batch.length === 0) break;
-
+      const csvParts: BlobPart[] = exportRequirements ? [`${opts.columns.join(',')}\n`] : [];
+      const interviewParts: BlobPart[] = exportInterviews ? [`${INTERVIEW_EXPORT_COLUMNS.join(',')}\n`] : [];
+      let interviewRows = 0;
+      let interviewLimitReached = false;
+      const totalRows = await streamRequirementsForExport(opts.scope, async (batch) => {
+        const requirementNumberById = new Map<string, string>(
+          batch.map((req) => [req.id, req.requirement_number ? String(req.requirement_number) : ''])
+        );
         const lines = batch
           .map(req => opts.columns.map(col => csvEscape(req[col as keyof Requirement])).join(','))
           .join('\n');
-
-        csvParts.push(`${lines}\n`);
-        totalExported += batch.length;
-        setExportedRows(totalExported);
-        cursorCreatedAt = batch[batch.length - 1]?.created_at;
-
-        if (batch.length < limit) break;
-
-        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+        if (exportRequirements) {
+          csvParts.push(`${lines}\n`);
+        }
+        if (exportInterviews && batch.length > 0 && !interviewLimitReached) {
+          const requirementIds = batch.map((req) => req.id);
+          await streamInterviewsForRequirementIds(requirementIds, (interviewBatch) => {
+            const remaining = INTERVIEW_EXPORT_MAX_ROWS - interviewRows;
+            if (remaining <= 0) {
+              interviewLimitReached = true;
+              return false;
+            }
+            const exportBatch = interviewBatch.slice(0, remaining);
+            const interviewLines = exportBatch
+              .map((interview) => INTERVIEW_EXPORT_COLUMNS
+                .map((col) => csvEscape(getInterviewExportValue(interview, col, requirementNumberById)))
+                .join(','))
+              .join('\n');
+            interviewParts.push(`${interviewLines}\n`);
+            interviewRows += exportBatch.length;
+            if (exportBatch.length < interviewBatch.length) {
+              interviewLimitReached = true;
+              return false;
+            }
+          });
+        }
+      });
+      if (totalRows === null) return;
+      if (exportRequirements) {
+        downloadBlob(csvParts, csvFilename, 'text/csv');
       }
-
-      downloadBlob(csvParts, `requirements_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv');
+      if (exportInterviews) {
+        downloadBlob(interviewParts, interviewsFilename, 'text/csv');
+      }
       showToast({
         type: 'success',
         title: 'Export successful',
-        message: `${totalExported} requirements exported to CSV`,
+        message: exportInterviews && exportRequirements
+          ? interviewLimitReached
+            ? `${totalRows.toLocaleString()} requirements exported. Interviews capped at ${INTERVIEW_EXPORT_MAX_ROWS.toLocaleString()} rows for stability (exported ${interviewRows.toLocaleString()}).`
+            : `${totalRows.toLocaleString()} requirements and ${interviewRows.toLocaleString()} interviews exported to CSV`
+          : exportInterviews
+            ? interviewLimitReached
+              ? `Interviews exported to CSV (capped at ${INTERVIEW_EXPORT_MAX_ROWS.toLocaleString()} rows, exported ${interviewRows.toLocaleString()}).`
+              : `${interviewRows.toLocaleString()} interviews exported to CSV`
+            : `${totalRows.toLocaleString()} requirements exported to CSV`,
       });
     } catch (err) {
       showToast({
@@ -426,7 +999,24 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
     } finally {
       setIsExporting(false);
     }
-  }, [user, requirements, showToast, csvEscape, downloadBlob, page, dateFromIso, dateToIso]);
+  }, [
+    showToast,
+    csvEscape,
+    getInterviewExportValue,
+    htmlEscape,
+    downloadBlob,
+    streamRequirementsForExport,
+    streamInterviewsForRequirementIds,
+    dateFromIso,
+    dateToIso,
+    orderByColumn,
+    orderDir,
+    activeSearch,
+    activeStatus,
+    activeMinRate,
+    activeMaxRate,
+    activeRemoteFilter,
+  ]);
 
   if (loading) {
     return <div className="p-6 text-center text-gray-500">Loading report...</div>;
@@ -572,7 +1162,7 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
 
         <DialogActions>
           <Button
-            onClick={() => setShowExportModal(true)}
+            onClick={openExportModal}
             variant="contained"
             startIcon={<Download className="w-4 h-4" />}
           >
@@ -588,6 +1178,9 @@ export const RequirementsReport = ({ onClose }: RequirementsReportProps) => {
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         onExport={handleExport}
+        estimatedRows={estimatedRows}
+        isEstimatingRows={isEstimatingRows}
+        onScopeChange={requestExportEstimate}
       />
     </>
   );

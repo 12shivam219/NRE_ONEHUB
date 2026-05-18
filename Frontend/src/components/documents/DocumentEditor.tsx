@@ -8,6 +8,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { downloadDocument, saveDocumentToApp, saveDocumentToAppFolder } from '../../lib/api/documents';
 import {
   fetchOnlyOfficeCallbackUrl,
+  fetchOnlyOfficeConfigToken,
   forceSaveOnlyOfficeDocument,
   getOnlyOfficeCallbackUrl,
 } from '../../lib/api/onlyoffice';
@@ -16,6 +17,7 @@ import {
   getOnlyOfficeDocumentServerUrl,
   getOnlyOfficeDocumentType,
   getOnlyOfficeFileType,
+  isOnlyOfficeJwtDisabled,
   isOnlyOfficeConfigured,
   loadOnlyOfficeApi,
   type OnlyOfficeConfig,
@@ -193,7 +195,7 @@ export const DocumentEditor = ({ documents, layout, onClose, onSave }: DocumentE
               }
             }
 
-            nextConfigs[doc.id] = {
+            const config: OnlyOfficeConfig = {
               document: {
                 fileType: getOnlyOfficeFileType(doc),
                 key: createOnlyOfficeDocumentKey(doc),
@@ -225,6 +227,11 @@ export const DocumentEditor = ({ documents, layout, onClose, onSave }: DocumentE
               type: 'desktop',
               width: '100%',
             };
+
+            if (!isOnlyOfficeJwtDisabled()) {
+              config.token = await fetchOnlyOfficeConfigToken(doc.id, config);
+            }
+            nextConfigs[doc.id] = config;
           })
         );
 

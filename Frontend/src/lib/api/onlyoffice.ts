@@ -1,4 +1,5 @@
 import type { Database } from '../database.types';
+import type { OnlyOfficeConfig } from '../onlyoffice';
 import { supabase } from '../supabase';
 
 type Document = Database['public']['Tables']['documents']['Row'];
@@ -65,6 +66,43 @@ export async function fetchOnlyOfficeCallbackUrl(documentId: string): Promise<st
   }
 
   return payload.url;
+}
+
+export async function fetchOnlyOfficeConfigToken(
+  documentId: string,
+  config: OnlyOfficeConfig
+): Promise<string> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
+    throw new Error('You must be signed in to open the document editor.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/onlyoffice/config-token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ document_id: documentId, config }),
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as { token?: string; detail?: unknown };
+
+  if (!response.ok) {
+    const detail =
+      typeof payload.detail === 'string'
+        ? payload.detail
+        : Array.isArray(payload.detail)
+          ? 'Request validation failed'
+          : `Failed to get ONLYOFFICE config token (HTTP ${response.status})`;
+    throw new Error(detail);
+  }
+
+  if (!payload.token) {
+    throw new Error('API did not return an ONLYOFFICE config token');
+  }
+
+  return payload.token;
 }
 
 export const forceSaveOnlyOfficeDocument = async (

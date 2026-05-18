@@ -10,6 +10,8 @@ type ResourceType =
   | 'consultant'
   | 'bulk_email_campaign'
   | 'requirement_email'
+  | 'document'
+  | 'email'
   | string;
 
 type LogDetails = Record<string, unknown> | null | undefined;
@@ -20,9 +22,15 @@ export interface ActivityLogResult {
   error?: string;
 }
 
+export interface LogActivityResult {
+  success: boolean;
+  error?: string;
+}
+
 /**
  * Write a unified audit entry for CRM/marketing flows.
  * Stores actor in `user_id` for queryability; additional context lives in `details`.
+ * Captures IP address for forensic analysis.
  */
 export const logActivity = async (params: {
   action: string;
@@ -31,8 +39,9 @@ export const logActivity = async (params: {
   resourceId?: string | null;
   description?: string;
   details?: LogDetails;
-}): Promise<void> => {
-  const { action, actorId = null, resourceType = null, resourceId = null, description = null, details } = params;
+  ipAddress?: string | null;
+}): Promise<LogActivityResult> => {
+  const { action, actorId = null, resourceType = null, resourceId = null, description = null, details, ipAddress = null } = params;
 
   const payload: ActivityLogInsert = {
     user_id: actorId ?? null,
@@ -42,18 +51,20 @@ export const logActivity = async (params: {
     details: (description
       ? { description, ...details }
       : details || null) as ActivityLog['details'],
-    ip_address: null,
+    ip_address: ipAddress ?? null,
   };
 
   try {
     const { error } = await supabase.from('activity_logs').insert(payload);
-    if (error && import.meta.env.DEV) {
+    if (error) {
       console.error('[audit] insert failed', error);
+      return { success: false, error: error.message };
     }
+    return { success: true };
   } catch (error) {
-    if (import.meta.env.DEV) {
-      console.error('[audit] insert exception', error);
-    }
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[audit] insert exception', errorMsg);
+    return { success: false, error: errorMsg };
   }
 };
 

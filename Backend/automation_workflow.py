@@ -21,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Tuple, Optional, Dict
 import io
+import json
 
 # Import internal modules
 from utils.resume_catalog import ResumeCatalog
@@ -29,6 +30,17 @@ from utils.gemini_points_generator import GeminiPointsGenerator
 from utils.resume_injector import ResumeInjector
 from utils.text_processor import TextProcessor
 from utils.email_sender import GmailSender
+
+# Supabase integration
+try:
+    from supabase import create_client
+    SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or ""
+    SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SECRET_KEY") or ""
+    supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+except Exception as e:
+    supabase_client = None
+    logger_init = logging.getLogger(__name__)
+    logger_init.warning(f"Failed to initialize Supabase client: {e}")
 
 # Setup logging
 logging.basicConfig(
@@ -65,6 +77,26 @@ class AutomationWorkflow:
         }
         self.workflow_log.append(log_entry)
         logger.info(f"[{step}] {status}: {details}")
+    
+    def log_to_supabase(self, action: str, resource_type: str, resource_id: str, 
+                       description: str, details: Optional[Dict] = None, user_id: Optional[str] = None):
+        """Log activity to Supabase activity_logs table."""
+        if not supabase_client:
+            logger.debug(f"Supabase client unavailable, skipping audit log: {action}")
+            return
+        
+        try:
+            payload = {
+                "action": action,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "details": {"description": description, **(details or {})},
+                "user_id": user_id,
+            }
+            supabase_client.table("activity_logs").insert(payload).execute()
+            logger.info(f"Logged to Supabase: {action} for {resource_type} {resource_id}")
+        except Exception as e:
+            logger.error(f"Failed to log to Supabase: {e}")
     
     def save_workflow_log(self, job_title: str):
         """Save workflow log to file."""
@@ -226,6 +258,20 @@ Best regards,
                 "technologies": selected_resume.get('technologies', [])
             }
             
+            # Log resume selection to Supabase
+            self.log_to_supabase(
+                action="resume_selected",
+                resource_type="automation_workflow",
+                resource_id=f"{job_title}_{int(datetime.now().timestamp())}",
+                description=f"Selected resume '{selected_resume['name']}' for {job_title} position",
+                details={
+                    "resume_name": selected_resume['name'],
+                    "job_title": job_title,
+                    "selection_method": "direct" if resume_path else ("override" if override_resume else "auto-match"),
+                    "match_score": best_match.get('score') if 'best_match' in locals() else None,
+                }
+            )
+            
             # Generate default message if not provided (now that we have person name)
             if not personal_message or len(personal_message.strip()) < 5:
                 person_name = selected_resume.get('person_name', 'Candidate')
@@ -384,6 +430,20 @@ Best regards,
                         self.log_step("Email Sending", "SUCCESS", 
                                      f"Email sent to {recruiter_email}")
                         result["email_sent"] = True
+                        
+                        # Log to Supabase
+                        self.log_to_supabase(
+                            action="resume_sent_to_recruiter",
+                            resource_type="automation_workflow",
+                            resource_id=f"{job_title}_{int(datetime.now().timestamp())}",
+                            description=f"Sent resume to {recruiter_email} for {job_title} position",
+                            details={
+                                "resume_name": selected_resume['name'],
+                                "recruiter_email": recruiter_email,
+                                "job_title": job_title,
+                                "points_per_tech": points_per_tech,
+                            }
+                        )
                     else:
                         self.log_step("Email Sending", "FAILED", "Email send failed")
                         result["errors"].append("Failed to send email")

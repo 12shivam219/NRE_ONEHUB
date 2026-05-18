@@ -195,11 +195,18 @@ class ResumeInjector:
             if not non_empty_cycles:
                 raise ValueError("No actual points found in any cycles. Cycles are empty.")
             
-            # Auto-detect all bookmarks in the resume
-            available_bookmarks = self.bookmark_manager.detect_bookmarks(resume_bytes)
+            # Auto-detect all bookmarks in the resume. If the uploaded resume has
+            # none, recreate them from a bookmarked reference resume before injecting.
+            resume_bytes, available_bookmarks, bookmark_details = self.bookmark_manager.ensure_bookmarks_from_reference(resume_bytes)
+            if bookmark_details.get("auto_created"):
+                doc = Document(resume_bytes)
             
             if not available_bookmarks:
-                raise ValueError("No bookmarks found in resume template. Please add bookmarks first.")
+                raise ValueError(
+                    "No bookmarks found in resume template, and no bookmarked reference resume was available "
+                    "to auto-create them. Please add one bookmarked resume to ./resumes or set "
+                    "BOOKMARK_REFERENCE_RESUME_PATH."
+                )
             
             # Generate or use provided mapping
             if custom_mapping:

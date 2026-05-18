@@ -10,11 +10,12 @@ import {
   getOnlyOfficeDocumentServerUrl,
   getOnlyOfficeDocumentType,
   getOnlyOfficeFileType,
+  isOnlyOfficeJwtDisabled,
   isOnlyOfficeConfigured,
   loadOnlyOfficeApi,
   type OnlyOfficeConfig,
 } from '../../lib/onlyoffice';
-import { getOnlyOfficeCallbackUrl } from '../../lib/api/onlyoffice';
+import { fetchOnlyOfficeConfigToken, getOnlyOfficeCallbackUrl } from '../../lib/api/onlyoffice';
 import type { Database } from '../../lib/database.types';
 
 type Document = Database['public']['Tables']['documents']['Row'];
@@ -203,6 +204,9 @@ export const DocumentPreviewModal = ({ isOpen, document, onClose }: DocumentPrev
           width: '100%',
         };
 
+        if (!isOnlyOfficeJwtDisabled()) {
+          config.token = await fetchOnlyOfficeConfigToken(document.id, config);
+        }
         previewInstance = new window.DocsAPI!.DocEditor(elementId, config);
       } catch (error) {
         if (!cancelled) {

@@ -1,7 +1,7 @@
 import { supabase } from '../supabase';
 import type { Database } from '../database.types';
 import { logActivity, formatChanges } from './audit';
-import { getCacheValue, setCacheValue, generateRequirementsCacheKey } from '../redis';
+import { getCacheValue, setCacheValue, generateRequirementsCacheKey, clearCachePattern } from '../redis';
 
 type Requirement = Database['public']['Tables']['requirements']['Row'];
 type RequirementInsert = Database['public']['Tables']['requirements']['Insert'];
@@ -223,11 +223,15 @@ export const getRequirementsPage = async (
       pageSize: limit,
       search,
       status,
+      dateFrom,
+      dateTo,
       minRate,
       maxRate,
       remoteFilter,
       sortBy: orderBy,
       sortOrder: orderDir,
+      cursorCreatedAt: cursor?.created_at,
+      cursorDirection: cursor?.direction,
     });
 
     const redisResult = await getCacheValue<any>(redisCacheKey);   
@@ -257,7 +261,7 @@ export const getRequirementsPage = async (
     if (status && status !== 'ALL' && VALID_REQUIREMENT_STATUSES.includes(status as Requirement['status'])) query = query.eq('status', status);
 
     // ⚡ OPTIMIZATION: Use optimized search strategy based on search term presence
-    if (search && search.trim()) {
+    if (typeof search === 'string' && search.trim()) {
       const raw = search.trim().slice(0, 120);
       
       // Detect phone searches by checking digit density and count
@@ -454,17 +458,17 @@ export const createRequirement = async (
     }
 
     // Write audit entry (best effort)
-    try {
-      await logActivity({
-        action: 'requirement_created',
-        actorId: userId,
-        resourceType: 'requirement',
-        resourceId: inserted.id,
-        description: `Created requirement "${inserted.title}" (#${inserted.requirement_number})`,
-      });
-    } catch {
-      // ignore
-    }
+    await logActivity({
+      action: 'requirement_created',
+      actorId: userId,
+      resourceType: 'requirement',
+      resourceId: inserted.id,
+      description: `Created requirement "${inserted.title}" (#${inserted.requirement_number})`,
+    }).catch(() => {
+      // Log failure silently - don't block operation
+    });
+
+    await clearCachePattern('requirements:*');
 
     return { success: true, requirement: inserted };
   } catch (err) {
@@ -491,8 +495,17 @@ export const updateRequirement = async (
       return { success: false, error: fetchError.message };
     }
 
+    // Create update payload, excluding search_vector which is a computed column
+    // search_vector can only be updated to DEFAULT in PostgreSQL
+    const updatePayload = Object.entries(updates).reduce((acc, [key, value]) => {
+      if (key !== 'search_vector') {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, unknown>);
+
     const dataToUpdate = {
-      ...updates,
+      ...updatePayload,
       updated_at: new Date().toISOString(),
       updated_by: userId || null,
     };
@@ -518,7 +531,11 @@ export const updateRequirement = async (
       resourceId: id,
       description,
       details: { changes },
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
+
+    await clearCachePattern('requirements:*');
 
     return { success: true, requirement: data };
   } catch {
@@ -537,6 +554,8 @@ export const deleteRequirement = async (
       resourceType: 'requirement',
       resourceId: id,
       description: 'Deleted requirement',
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
 
     const { error } = await supabase
@@ -547,6 +566,8 @@ export const deleteRequirement = async (
     if (error) {
       return { success: false, error: error.message };
     }
+
+    await clearCachePattern('requirements:*');
 
     return { success: true };
   } catch {

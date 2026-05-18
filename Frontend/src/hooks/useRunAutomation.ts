@@ -70,3 +70,44 @@ export const useDownloadResume = () => {
     },
   });
 };
+
+export const useSendAutomationEmail = () => {
+  const { showToast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (data: {
+      document_id: string;
+      recruiter_email: string;
+      job_title: string;
+      personal_message?: string;
+    }) => {
+      if (!user?.id) {
+        throw new Error('User not authenticated');
+      }
+
+      const response = await automationAPI.sendEmail({
+        ...data,
+        user_id: user.id,
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to send email');
+      }
+
+      return response.data;
+    },
+    onSuccess: () => {
+      showToast({
+        message: 'Resume emailed successfully!',
+        type: 'success',
+      });
+    },
+    onError: (error) => {
+      showToast({
+        message: `Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        type: 'error',
+      });
+    },
+  });
+};

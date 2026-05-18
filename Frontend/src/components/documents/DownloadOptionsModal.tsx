@@ -62,9 +62,11 @@ export const DownloadOptionsModal = ({
     if (result.success) {
       const allFolders = result.folders || [];
       setFolders(allFolders);
+      // Set to first available folder if no selection yet
       setSelectedFolderId((prev) => prev || allFolders[0]?.id || '');
     } else {
       setFolders([]);
+      setSelectedFolderId('');
     }
   }, [user?.id]);
 
@@ -79,9 +81,11 @@ export const DownloadOptionsModal = ({
       if (result.success) {
         const allFolders = result.folders || [];
         setFolders(allFolders);
-        setSelectedFolderId((prev) => prev || allFolders[0]?.id || '');
+        // Always set to first folder if available, don't preserve previous selection
+        setSelectedFolderId(allFolders[0]?.id || '');
       } else {
         setFolders([]);
+        setSelectedFolderId('');
       }
     };
 
@@ -100,6 +104,7 @@ export const DownloadOptionsModal = ({
       setShowCreateFolderForm(false);
       setIsCreatingFolder(false);
       setNewFolderName('');
+      setSelectedFolderId('');
       setError(null);
     }
   }, [isOpen]);
@@ -156,16 +161,26 @@ export const DownloadOptionsModal = ({
   const handleSaveToAppFolder = useCallback(async () => {
     try {
       setError(null);
+      
+      if (!selectedFolderId) {
+        setError('Please select a folder first');
+        return;
+      }
+      
+      console.log('📁 Saving to folder:', { selectedFolderId, folders: folders.map(f => ({ id: f.id, name: f.name })) });
+      
       setIsLoading('folder');
       await onSaveToAppFolder(selectedFolderId || null);
       setError(null); // Clear error on success (Bug #19)
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save to folder');
+      const errorMsg = err instanceof Error ? err.message : 'Failed to save to folder';
+      console.error('❌ Save to folder error:', errorMsg);
+      setError(errorMsg);
     } finally {
       setIsLoading(null);
     }
-  }, [onSaveToAppFolder, onClose, selectedFolderId]);
+  }, [onSaveToAppFolder, onClose, selectedFolderId, folders]);
 
   const handleCreateFolder = useCallback(async () => {
     if (!user?.id) {
@@ -303,20 +318,23 @@ export const DownloadOptionsModal = ({
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900">Save to App Storage</p>
+                <p className="font-medium text-gray-900">Save to App Storage (Root)</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Store a snapshot in your app library. Access it anytime without re-downloading
+                  Store a snapshot in your app library root. For organized storage, use "Save to Folder" option below instead
                 </p>
               </div>
             </div>
           </button>
 
-          {/* Save to Application Folder */}
-          <div className="space-y-2 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+          {/* Save to Application Folder - RECOMMENDED FOR ORGANIZED STORAGE */}
+          <div className="space-y-2 rounded-xl border-2 border-blue-500 bg-blue-50 p-4 ring-1 ring-blue-200">
             <div className="flex items-center justify-between gap-3">
-              <label htmlFor="app-folder-select" className="text-xs font-semibold uppercase tracking-wide text-blue-800">
-                Target Folder
-              </label>
+              <div>
+                <label htmlFor="app-folder-select" className="text-xs font-bold uppercase tracking-wide text-blue-900">
+                  📁 Save to Folder (Recommended)
+                </label>
+                <p className="text-xs text-blue-700 mt-1 font-medium">Select a folder to organize your file</p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -439,7 +457,7 @@ export const DownloadOptionsModal = ({
 
           <button
             onClick={handleSaveToAppFolder}
-            disabled={isLoading !== null || folders.length === 0}
+            disabled={isLoading !== null || folders.length === 0 || !selectedFolderId}
             className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left"
           >
             <div className="flex items-start gap-3">

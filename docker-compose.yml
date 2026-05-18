@@ -1,4 +1,15 @@
 services:
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: onlyoffice-document-server
+    ports:
+      - "8080:80"
+      - "8443:443"
+    environment:
+      JWT_ENABLED: ${JWT_ENABLED:-true}
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-local-onlyoffice-dev-secret}
+    restart: unless-stopped
+
   api:
     build:
       context: .
@@ -20,7 +31,7 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
         VITE_TEXT_PROCESSOR_API_KEY: ${VITE_TEXT_PROCESSOR_API_KEY:-}
     ports:
-      - "8080:80"
+      - "5173:80"
     depends_on:
       - api
     restart: unless-stopped

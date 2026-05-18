@@ -7,6 +7,7 @@ const DEFAULT_ALLOWLIST = [
   'zoom.us',
   'webex.com',
   'bluejeans.com',
+  'supabase.co', // Allow Supabase storage for file downloads (BUG FIX #20)
 ];
 
 export function isAllowedRedirect(target: string, allowlist?: string[]) {

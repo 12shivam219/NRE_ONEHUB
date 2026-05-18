@@ -141,10 +141,13 @@ const SANITIZE_OPTIONS = {
   disallowedTagsMode: 'escape'
 };
 
-// SECURITY: Validate email format
+// SECURITY: Validate email format (RFC 5322 simplified)
 function isValidEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  if (!email || typeof email !== 'string') return false;
+  const emailRegex = /^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  const isValid = emailRegex.test(email);
+  if (!isValid) return false;
+  return !email.includes('..') && !email.startsWith('.') && !email.endsWith('.');
 }
 
 // SECURITY: Authenticate requests with API key or a valid Supabase session token
@@ -353,6 +356,26 @@ app.post('/api/send-email', emailLimiter, authenticateRequest, async (req, res) 
     const info = await account.transporter.sendMail(mailOptions);
 
     if (NODE_ENV === 'development') console.log('Email sent:', info.messageId);
+
+    // Log email send activity
+    if (supabase) {
+      supabase
+        .from('activity_logs')
+        .insert({
+          action: 'email_sent',
+          resource_type: 'email',
+          details: {
+            to,
+            subject,
+            messageId: info.messageId,
+          },
+        })
+        .catch((err) => {
+          if (NODE_ENV === 'development') {
+            console.error('Failed to log email send activity:', err.message);
+          }
+        });
+    }
 
     res.json({ success: true, message: 'Email sent', messageId: info.messageId });
   } catch (error) {

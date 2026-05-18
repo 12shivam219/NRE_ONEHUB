@@ -608,10 +608,11 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
     try {
       if (!isOnline) {
         await queueOfflineOperation('DELETE', 'requirement', requirement.id, {});
-        await mutateRequirements((curr: any) => {
+        // Optimistically remove from UI immediately
+        void mutateRequirements((curr: any) => {
           if (!curr) return curr;
           return { ...curr, requirements: curr.requirements.filter((r: any) => r.id !== requirement.id) };
-        }, { revalidate: false });
+        }, false);
         setSelectedRequirement(null);
         setShowDeleteConfirm(false);
         setRequirementToDelete(null);
@@ -620,23 +621,20 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
           title: 'Queued for Sync',
           message: 'Requirement will be deleted when you come back online'
         });
-        setPage(0);
-        await mutateRequirements();
         return;
       }
 
       const result = await deleteRequirement(requirement.id, user.id);
       if (result.success) {
-        await mutateRequirements((curr: any) => {
+        // Optimistically remove from UI immediately
+        void mutateRequirements((curr: any) => {
           if (!curr) return curr;
           return { ...curr, requirements: curr.requirements.filter((r: any) => r.id !== requirement.id) };
-        }, { revalidate: false });
+        }, false);
         setSelectedRequirement(null);
         setShowDeleteConfirm(false);
         setRequirementToDelete(null);
         showToast({ type: 'success', title: 'Requirement deleted', message: 'The requirement has been removed.' });
-        setPage(0);
-        await mutateRequirements();
       } else {
         showToast({ type: 'error', title: 'Failed to delete', message: result.error || 'Unknown error' });
       }
@@ -812,33 +810,6 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
 
       {/* Requirements Display - Table View Only */}
       <div className="w-full">
-        {/* Empty State - When no requirements match filters */}
-        {requirements.length === 0 && !loading && (
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 3,
-              mb: 3,
-              bgcolor: 'rgba(59, 130, 246, 0.05)',
-              borderColor: 'rgba(59, 130, 246, 0.3)',
-              borderRadius: 2,
-              textAlign: 'center'
-            }}
-          >
-            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-              {searchTerm ? '🔍 No requirements found' : '📝 No requirements yet'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {searchTerm 
-                ? `No requirements match "${searchTerm}". Try a different search term or adjust filters.`
-                : 'You haven\'t added any requirements yet. Click "New Requirement" to get started.'}
-            </Typography>
-          </Paper>
-        )}
-
-        {/* Performance Info - When showing results without explicit search */}
-        {/* Removed: Showing recent requirements info message */}
-
         <RequirementsTable
           requirements={requirements}
           onViewDetails={handleViewDetails}
@@ -867,7 +838,24 @@ export const RequirementsManagement = memo(({ onCreateInterview }: RequirementsM
       />
 
       {/* Report Modal */}
-      {showReport && <RequirementsReport onClose={() => setShowReport(false)} />}
+      {showReport && (
+        <RequirementsReport
+          onClose={() => setShowReport(false)}
+          initialFilters={{
+            search: searchTerm,
+            status: filterStatus,
+            minRate,
+            maxRate,
+            remoteFilter,
+            sortBy,
+            sortOrder,
+          }}
+          initialDateRange={{
+            start: dateRange.from,
+            end: dateRange.to,
+          }}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

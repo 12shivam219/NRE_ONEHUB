@@ -209,6 +209,8 @@ export const createBulkEmailCampaign = async (
       resourceType: 'bulk_email_campaign',
       resourceId: campaign.id,
       description: `Created bulk email campaign "${subject}" for ${recipients.length} recipient${recipients.length !== 1 ? 's' : ''}`,
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
 
     // Insert recipient records

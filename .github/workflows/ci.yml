@@ -25,9 +25,8 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
-      # Scoped until the full suite is aligned with current UI copy/components.
-      - name: Unit tests (core)
-        run: npm run test:run -- src/__tests__/DocumentEditor.test.tsx src/__tests__/useDocumentsInfinite.test.tsx
+      - name: Unit tests
+        run: npm run test:run -- --passWithNoTests
       - name: Production build
         env:
           VITE_SUPABASE_URL: https://example.supabase.co

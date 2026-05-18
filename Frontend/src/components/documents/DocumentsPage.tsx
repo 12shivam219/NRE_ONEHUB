@@ -18,11 +18,8 @@ import {
   ClipboardPaste,
   Cloud,
   Eye,
-  Monitor,
   MoreVertical,
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
@@ -34,16 +31,18 @@ import {
   saveDocumentToApp,
   saveDocumentToAppFolder,
 } from "../../lib/api/documents";
+import { moveToFolder } from "../../lib/api/folders";
 import type { Database } from "../../lib/database.types";
 import { debounce, formatFileSize } from "../../lib/utils";
 import { getRelativeTime } from "../../lib/dateFormatter";
 import { useToast } from "../../contexts/ToastContext";
 import { useDocumentsInfinite } from "../../hooks/useDocumentsInfinite";
 import { useFolders } from "../../hooks/useFolders";
-import { FolderSidebar } from "./FolderSidebar";
 import { CreateFolderModal } from "./CreateFolderModal";
+import { FolderSidebar } from "./FolderSidebar";
 import { ResumeProcessorPanel } from "./ResumeProcessorPanel";
 import { ResumePointsExtractor } from "./ResumePointsExtractor";
+import { TrashView } from "./TrashView";
 import { FolderPlus } from "lucide-react";
 import { lazy, Suspense } from "react";
 
@@ -61,6 +60,7 @@ import { useMediaQuery, useTheme } from "@mui/material";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 type Document = Database["public"]["Tables"]["documents"]["Row"];
+type DocumentFolder = Database["public"]["Tables"]["folders"]["Row"];
 
 type UIState = {
   uploading: boolean;
@@ -76,7 +76,6 @@ type UIState = {
   bulkDeleteMode: boolean;
   deletingInProgress: boolean;
   showCreateFolderModal: boolean;
-  sidebarOpen: boolean;
   showDownloadOptions: boolean;
   documentToDownload: Document | null;
   copiedDocument: Document | null;
@@ -102,7 +101,6 @@ type UIAction =
   | { type: "closeBulkDeleteConfirm" }
   | { type: "setDeletingInProgress"; value: boolean }
   | { type: "setShowCreateFolderModal"; value: boolean }
-  | { type: "toggleSidebar" }
   | { type: "openDownloadOptions"; document: Document }
   | { type: "closeDownloadOptions" }
   | { type: "setCopiedDocument"; document: Document | null }
@@ -123,7 +121,6 @@ const initialUIState: UIState = {
   bulkDeleteMode: false,
   deletingInProgress: false,
   showCreateFolderModal: false,
-  sidebarOpen: true,
   showDownloadOptions: false,
   documentToDownload: null,
   copiedDocument: null,
@@ -183,8 +180,6 @@ function uiReducer(state: UIState, action: UIAction): UIState {
       return { ...state, deletingInProgress: action.value };
     case "setShowCreateFolderModal":
       return { ...state, showCreateFolderModal: action.value };
-    case "toggleSidebar":
-      return { ...state, sidebarOpen: !state.sidebarOpen };
     case "openDownloadOptions":
       return {
         ...state,
@@ -236,8 +231,10 @@ const DocumentRow = memo(
     onDownload: (doc: Document) => void;
     onDelete: (id: string) => void;
     onCopy: (doc: Document) => void;
+    onEdit: (doc: Document) => void;
+    onDragStart: (doc: Document, e: React.DragEvent<HTMLDivElement>) => void;
   }) => {
-    const { doc, selected, onToggle, onPreview, onDownload, onDelete, onCopy } = props;
+    const { doc, selected, onToggle, onPreview, onDownload, onDelete, onCopy, onEdit, onDragStart } = props;
 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
@@ -303,65 +300,77 @@ const DocumentRow = memo(
 
     return (
       <div
-        className={`grid grid-cols-[44px_1fr_110px_110px_130px_140px] items-center px-4 py-3 border-b border-slate-100 cursor-pointer transition-all ${
-          selected ? "bg-blue-50 border-l-4 border-l-blue-600" : "bg-white hover:bg-slate-50"
-        } focus-ring`}
+        className={`group flex items-center gap-3 px-6 py-3 border-b border-slate-100 cursor-pointer transition-colors ${
+          selected ? "bg-blue-50" : "hover:bg-slate-50"
+        }`}
         onClick={() => onPreview(doc)}
         onKeyDown={handleRowKeyDown}
         role="button"
         tabIndex={0}
         aria-label={`Preview document ${doc.original_filename}`}
+        draggable
+        onDragStart={(e) => onDragStart(doc, e)}
       >
-        <div className="flex items-center">
+        {/* Checkbox */}
+        <div className="flex-shrink-0">
           <input
             type="checkbox"
             checked={selected}
             onChange={() => onToggle(doc.id)}
-            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
             onClick={(e) => e.stopPropagation()}
             aria-label={`${selected ? "Deselect" : "Select"} ${
               doc.original_filename
             }`}
           />
         </div>
-        <div className="min-w-0">
+
+        {/* Document Info - Flexible */}
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-md bg-blue-100 flex items-center justify-center flex-shrink-0">
               <FileText className="w-4 h-4 text-blue-600" />
             </div>
-            <span className="text-sm font-semibold text-slate-900 truncate hover:text-blue-600">
-              {doc.original_filename}
-            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-900 truncate">
+                {doc.original_filename}
+              </p>
+              <p className="text-xs text-slate-500">
+                {formatFileSize(doc.file_size)} • {getRelativeTime(doc.created_at)}
+              </p>
+            </div>
           </div>
         </div>
-        <div className="text-right text-sm font-medium text-slate-700">
-          <span className="inline-flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded-md text-xs">v{doc.version}</span>
+
+        {/* Version Badge */}
+        <div className="flex-shrink-0 hidden sm:block">
+          <span className="inline-flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded-md text-xs text-slate-600">
+            v{doc.version}
+          </span>
         </div>
-        <div className="text-right text-sm text-slate-600 font-medium">
-          {formatFileSize(doc.file_size)}
-        </div>
-        <div className="text-right text-sm text-slate-600">
-          {getRelativeTime(doc.created_at)}
-        </div>
-        <div className="flex items-center justify-end gap-2">
+
+        {/* Action Buttons - Visible on mobile, hidden until hover on desktop */}
+        <div className="flex items-center gap-2 flex-shrink-0 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+          {/* Preview Button */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onPreview(doc);
             }}
-            className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-            title="Preview document"
+            className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Preview"
             aria-label="Preview document"
           >
             <Eye className="w-4 h-4" />
           </button>
 
+          {/* More Menu */}
           <div onClick={(e) => e.stopPropagation()}>
             <button
               ref={menuButtonRef}
               type="button"
-              className="p-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
               aria-label="More actions"
               aria-haspopup="menu"
               aria-expanded={isMenuOpen}
@@ -376,7 +385,7 @@ const DocumentRow = memo(
                 ref={menuRef}
                 role="menu"
                 id={menuId}
-                className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden z-[9999]"
+                className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden z-[9999]"
                 style={{
                   top: `${menuPos.top}px`,
                   right: `${menuPos.right}px`,
@@ -385,7 +394,7 @@ const DocumentRow = memo(
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full px-4 py-2.5 text-sm text-left text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center gap-3"
+                  className="w-full px-4 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-3"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -399,7 +408,7 @@ const DocumentRow = memo(
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full px-4 py-2.5 text-sm text-left text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center gap-3 border-t border-slate-100"
+                  className="w-full px-4 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-3 border-t border-slate-100"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -413,7 +422,21 @@ const DocumentRow = memo(
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full px-4 py-2.5 text-sm text-left text-red-700 hover:bg-red-50 transition-colors flex items-center gap-3 border-t border-slate-100"
+                  className="w-full px-4 py-2 text-sm text-left text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-3 border-t border-slate-100"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsMenuOpen(false);
+                    onEdit(doc);
+                  }}
+                >
+                  <Edit className="w-4 h-4" aria-hidden="true" />
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full px-4 py-2 text-sm text-left text-red-700 hover:bg-red-50 transition-colors flex items-center gap-3 border-t border-slate-100"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -443,8 +466,10 @@ const MobileDocumentCard = memo(
     onDownload: (doc: Document) => void;
     onDelete: (id: string) => void;
     onCopy: (doc: Document) => void;
+    onEdit: (doc: Document) => void;
+    onDragStart: (doc: Document, e: React.DragEvent<HTMLDivElement>) => void;
   }) => {
-    const { doc, selected, onToggle, onPreview, onDownload, onDelete, onCopy } = props;
+    const { doc, selected, onToggle, onPreview, onDownload, onDelete, onCopy, onEdit, onDragStart } = props;
 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
@@ -516,6 +541,8 @@ const MobileDocumentCard = memo(
         aria-label={`Preview document ${doc.original_filename}`}
         onClick={() => onPreview(doc)}
         onKeyDown={handleCardKeyDown}
+        draggable
+        onDragStart={(e) => onDragStart(doc, e)}
       >
         <div className="flex items-start gap-3">
           <input
@@ -617,6 +644,20 @@ const MobileDocumentCard = memo(
                 <button
                   type="button"
                   role="menuitem"
+                  className="w-full px-4 py-2.5 text-sm text-left text-slate-700 hover:bg-purple-50 hover:text-purple-700 transition-colors flex items-center gap-3 border-t border-slate-100"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsMenuOpen(false);
+                    onEdit(doc);
+                  }}
+                >
+                  <Edit className="w-4 h-4" aria-hidden="true" />
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
                   className="w-full px-4 py-2.5 text-sm text-left text-red-700 hover:bg-red-50 transition-colors flex items-center gap-3 border-t border-slate-100"
                   onClick={(e) => {
                     e.preventDefault();
@@ -645,6 +686,11 @@ export const DocumentsPage = () => {
   const [search, setSearch] = useReducer((_: string, next: string) => next, "");
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [showActionMenu, setShowActionMenu] = useState(false);
+  const [showFolderDropdown, setShowFolderDropdown] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [sortBy, setSortBy] = useState<'created_desc' | 'created_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('created_desc');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'pdf' | 'doc' | 'docx'>('all');
+  const [showTrash, setShowTrash] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
@@ -652,13 +698,7 @@ export const DocumentsPage = () => {
     folders: _folders, 
     createNewFolder,
     refresh: _refreshFolders,
-  } = useFolders(currentFolderId);
-
-  type DocumentsPageData = {
-    documents: Document[];
-    cursorCreatedAt: string | null;
-    hasNextPage: boolean;
-  };
+  } = useFolders(null, 'all');
 
   const PAGE_SIZE = 100;
 
@@ -680,6 +720,59 @@ export const DocumentsPage = () => {
     reset,
   } = docsSWR;
 
+  const displayedDocuments = useMemo(() => {
+    const byType = documents.filter((doc) => {
+      if (typeFilter === 'all') return true;
+      const filename = String(doc.original_filename || doc.filename || '').toLowerCase();
+      return filename.endsWith(`.${typeFilter}`);
+    });
+
+    const sorted = [...byType];
+    sorted.sort((a, b) => {
+      switch (sortBy) {
+        case 'created_asc':
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case 'name_asc':
+          return String(a.original_filename || a.filename || '').localeCompare(String(b.original_filename || b.filename || ''));
+        case 'name_desc':
+          return String(b.original_filename || b.filename || '').localeCompare(String(a.original_filename || a.filename || ''));
+        case 'size_desc':
+          return (b.file_size || 0) - (a.file_size || 0);
+        case 'size_asc':
+          return (a.file_size || 0) - (b.file_size || 0);
+        case 'created_desc':
+        default:
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+    });
+
+    return sorted;
+  }, [documents, sortBy, typeFilter]);
+
+  const folderMap = useMemo(() => {
+    const map = new Map<string, DocumentFolder>();
+    _folders.forEach((folder) => {
+      map.set(folder.id, folder);
+    });
+    return map;
+  }, [_folders]);
+
+  const breadcrumbPath = useMemo(() => {
+    if (!currentFolderId) return [];
+
+    const path: DocumentFolder[] = [];
+    const visited = new Set<string>();
+    let current = folderMap.get(currentFolderId) || null;
+
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      path.unshift(current);
+      current = current.parent_folder_id ? folderMap.get(current.parent_folder_id) || null : null;
+    }
+
+    return path;
+  }, [currentFolderId, folderMap]);
+
   useEffect(() => {
     if (documentsError) {
       showToast({
@@ -697,11 +790,12 @@ export const DocumentsPage = () => {
     // Keep selection scoped to the currently visible result set.
     dispatch({ type: "clearSelection" });
     void reset();
-  }, [search, currentFolderId, reset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, currentFolderId]);
 
   const selectedDocIds = useMemo(
-    () => Array.from(ui.selectedDocs),
-    [ui.selectedDocs]
+    () => Array.from(ui.selectedDocs).filter((id) => displayedDocuments.some((doc) => doc.id === id)),
+    [ui.selectedDocs, displayedDocuments]
   );
 
   const openEditor = useCallback(() => {
@@ -738,7 +832,7 @@ export const DocumentsPage = () => {
       return;
     }
 
-    const docsToEdit = documents.filter((doc) => ui.selectedDocs.has(doc.id));
+    const docsToEdit = displayedDocuments.filter((doc) => ui.selectedDocs.has(doc.id));
     if (docsToEdit.length !== 1) {
       dispatch({ type: "clearSelection" });
       showToast({
@@ -750,7 +844,7 @@ export const DocumentsPage = () => {
     }
     dispatch({ type: "openEditor", documents: docsToEdit });
   }, [
-    documents,
+    displayedDocuments,
     ui.selectedDocs,
     isMobile,
     selectedDocIds.length,
@@ -780,7 +874,8 @@ export const DocumentsPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [ui.searchValue, debouncedUpdateSearch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ui.searchValue]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -833,6 +928,7 @@ export const DocumentsPage = () => {
   }, [reset]);
 
   const pendingTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
+  const uploadProgressIntervalsRef = useRef<NodeJS.Timeout[]>([]);
   const uploadAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   // Cleanup pending timeouts and uploads on unmount (Bug #3, #15: memory leak)
@@ -853,6 +949,10 @@ export const DocumentsPage = () => {
         }
       });
       uploadAbortControllers.clear();
+
+      // Clear all upload progress intervals
+      uploadProgressIntervalsRef.current.forEach(intervalId => clearInterval(intervalId));
+      uploadProgressIntervalsRef.current = [];
     };
   }, []);
 
@@ -923,9 +1023,11 @@ export const DocumentsPage = () => {
         progressMap[fileId] = Math.min(progressMap[fileId] + 10, 90);
         dispatch({ type: "setUploadProgress", value: { ...progressMap } });
       }, 200);
+      uploadProgressIntervalsRef.current.push(progressInterval);
 
       const result = await uploadDocument(file, user.id, 'local', undefined, currentFolderId);
       clearInterval(progressInterval);
+      uploadProgressIntervalsRef.current = uploadProgressIntervalsRef.current.filter(id => id !== progressInterval);
 
       if (result.success) {
         progressMap[fileId] = 100;
@@ -953,13 +1055,19 @@ export const DocumentsPage = () => {
       }
     }
 
-    // Clear all pending timeouts to prevent state conflicts
-    pendingTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
-    pendingTimeoutsRef.current = [];
-
     await refreshDocuments();
     dispatch({ type: "setUploading", value: false });
-    dispatch({ type: "setUploadProgress", value: {} });
+    
+    // BUG FIX #21: Clear pending individual file timeouts before clearing all progress
+    // This prevents race conditions that keep the upload notification visible
+    pendingTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+    pendingTimeoutsRef.current = [];
+    
+    // Clear upload progress after a short delay to show completion
+    const finalClearId = setTimeout(() => {
+      dispatch({ type: "setUploadProgress", value: {} });
+    }, 300);
+    pendingTimeoutsRef.current.push(finalClearId);
 
     if (successCount > 0) {
       showToast({
@@ -980,25 +1088,14 @@ export const DocumentsPage = () => {
     if (!ui.documentToDelete) return;
     const documentId = ui.documentToDelete;
 
-    dispatch({ type: "closeDeleteConfirm" });
+    // Set loading state to disable dialog buttons during deletion
+    dispatch({ type: "setDeletingInProgress", value: true });
     dispatch({ type: "removeSelectedDoc", docId: documentId });
     
     // Close preview if the deleted document was being previewed
     if (ui.selectedDocumentPreview?.id === documentId) {
       dispatch({ type: "setSelectedDocumentPreview", value: null });
     }
-
-    const removeFromPages = (
-      pages: DocumentsPageData[] | undefined
-    ): DocumentsPageData[] => {
-      if (!pages) return [];
-      return pages
-        .map((p) => ({
-          ...p,
-          documents: (p.documents || []).filter((d) => d.id !== documentId),
-        }))
-        .filter((p) => p.documents.length > 0); // Remove empty pages
-    };
 
     try {
       // Delete the document from the API
@@ -1007,18 +1104,13 @@ export const DocumentsPage = () => {
         throw new Error(result.error || "Failed to delete document");
       }
 
-      // Update the cache by filtering out the deleted document from all pages
-      await mutateDocuments(
-        (currentPages?: DocumentsPageData[]) => {
-          if (!currentPages) return undefined;
-          const filtered = removeFromPages(currentPages);
-          return filtered;
-        },
-        {
-          revalidate: false,
-          populateCache: true,
-        }
-      );
+      // Force server revalidation to fetch fresh data
+      await mutateDocuments(undefined, {
+        revalidate: true,
+      });
+
+      // Close dialog only after deletion succeeds
+      dispatch({ type: "closeDeleteConfirm" });
 
       showToast({
         type: "success",
@@ -1029,12 +1121,18 @@ export const DocumentsPage = () => {
       // On error, revalidate to ensure the UI is in sync with server
       await mutateDocuments();
       
+      // Close dialog on error too
+      dispatch({ type: "closeDeleteConfirm" });
+      
       showToast({
         type: "error",
         title: "Failed to delete document",
         message:
           err instanceof Error ? err.message : "Failed to delete document",
       });
+    } finally {
+      // Always clear loading state when deletion completes
+      dispatch({ type: "setDeletingInProgress", value: false });
     }
   };
 
@@ -1052,18 +1150,6 @@ export const DocumentsPage = () => {
       dispatch({ type: "setSelectedDocumentPreview", value: null });
     }
 
-    const removeFromPages = (
-      pages: DocumentsPageData[] | undefined
-    ): DocumentsPageData[] => {
-      if (!pages) return [];
-      return pages
-        .map((p) => ({
-          ...p,
-          documents: (p.documents || []).filter((d) => !documentIds.includes(d.id)),
-        }))
-        .filter((p) => p.documents.length > 0); // Remove empty pages
-    };
-
     try {
       // Delete all documents in parallel
       const deletePromises = documentIds.map(id => deleteDocument(id));
@@ -1076,18 +1162,10 @@ export const DocumentsPage = () => {
         throw new Error(`Failed to delete ${failedCount} document(s)`);
       }
 
-      // Update the cache by filtering out the deleted documents from all pages
-      await mutateDocuments(
-        (currentPages?: DocumentsPageData[]) => {
-          if (!currentPages) return undefined;
-          const filtered = removeFromPages(currentPages);
-          return filtered;
-        },
-        {
-          revalidate: false,
-          populateCache: true,
-        }
-      );
+      // Force server revalidation to fetch fresh data
+      await mutateDocuments(undefined, {
+        revalidate: true,
+      });
 
       // Dispatch state updates only after mutation succeeds
       dispatch({ type: "closeBulkDeleteConfirm" });
@@ -1167,8 +1245,10 @@ export const DocumentsPage = () => {
 
   const handleSaveToAppFolder = useCallback(
     async (document: Document, folderId: string | null) => {
+      console.log('📁 [DocumentsPage] Saving to folder:', { documentId: document.id, folderId, folderName: document.original_filename });
       const result = await saveDocumentToAppFolder(document.id, user?.id || '', folderId);
       if (result.success) {
+        console.log('✅ [DocumentsPage] Document saved successfully to folder:', folderId);
         await refreshDocuments();
         showToast({
           type: 'success',
@@ -1176,6 +1256,7 @@ export const DocumentsPage = () => {
           message: `${document.original_filename} has been saved to your application folder.`,
         });
       } else if (result.error) {
+        console.error('❌ [DocumentsPage] Failed to save to folder:', result.error);
         showToast({
           type: 'error',
           title: 'Failed to save to app folder',
@@ -1225,18 +1306,37 @@ export const DocumentsPage = () => {
     }
   }, [currentFolderId, refreshDocuments, showToast, ui.copiedDocument, user?.id]);
 
+  const handleFolderSelect = useCallback((folderId: string | null) => {
+    setCurrentFolderId(folderId);
+  }, []);
+
+  const handleFolderDeleted = useCallback(() => {
+    mutateDocuments?.();
+    _refreshFolders?.();
+  }, [mutateDocuments, _refreshFolders]);
+
+  const handleFolderCreated = useCallback(() => {
+    mutateDocuments?.();
+    _refreshFolders?.();
+  }, [mutateDocuments, _refreshFolders]);
+
+  const handleOpenTrash = useCallback(() => {
+    setShowTrash(true);
+  }, []);
+
   const handleCreateFolder = useCallback(
     async (name: string, description?: string) => {
       try {
-        await createNewFolder(name, description);
+        const result = await createNewFolder(name, description);
+        if (!result.success) {
+          return result;
+        }
+
         dispatch({ type: "setShowCreateFolderModal", value: false });
-        showToast({
-          type: "success",
-          title: "Folder created",
-          message: `"${name}" folder has been created successfully.`,
-        });
-        // Refresh documents to show in the list
+        // Refresh both documents and folders to show in real-time
         mutateDocuments?.();
+        _refreshFolders?.();
+        return result;
       } catch (error) {
         showToast({
           type: "error",
@@ -1246,7 +1346,7 @@ export const DocumentsPage = () => {
         throw error;
       }
     },
-    [createNewFolder, showToast, mutateDocuments]
+    [createNewFolder, showToast, mutateDocuments, _refreshFolders]
   );
 
   const toggleDocSelection = useCallback((docId: string) => {
@@ -1257,6 +1357,10 @@ export const DocumentsPage = () => {
     dispatch({ type: "setSelectedDocumentPreview", value: doc });
   }, []);
 
+  const handleEditDocument = useCallback((doc: Document) => {
+    dispatch({ type: "openEditor", documents: [doc] });
+  }, []);
+
   const handleRowDelete = useCallback(
     (documentId: string) => {
       handleDeleteClick(documentId);
@@ -1264,8 +1368,48 @@ export const DocumentsPage = () => {
     [handleDeleteClick]
   );
 
+  const handleDocumentDragStart = useCallback((doc: Document, e: React.DragEvent<HTMLDivElement>) => {
+    const payload = JSON.stringify({ type: 'document', id: doc.id, name: doc.original_filename });
+    e.dataTransfer.setData('application/json', payload);
+    e.dataTransfer.setData('text/plain', payload);
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  const handleDocumentDrop = useCallback(
+    async (documentId: string, targetFolderId: string | null) => {
+      if (!user?.id) return;
+      try {
+        const result = await moveToFolder(user.id, documentId, 'document', targetFolderId);
+        
+        if (result.success) {
+          showToast({
+            type: "success",
+            title: "Document moved",
+            message: "Document moved successfully",
+          });
+          // Refresh documents list
+          mutateDocuments?.();
+          _refreshFolders?.();
+        } else {
+          showToast({
+            type: "error",
+            title: "Move failed",
+            message: result.error || "Failed to move document",
+          });
+        }
+      } catch (error) {
+        showToast({
+          type: "error",
+          title: "Move failed",
+          message: error instanceof Error ? error.message : "Failed to move document",
+        });
+      }
+    },
+    [user?.id, showToast, mutateDocuments, _refreshFolders]
+  );
+
   const rowVirtualizer = useVirtualizer({
-    count: documents.length,
+    count: displayedDocuments.length,
     getScrollElement: () => document.getElementById("main-content"),
     estimateSize: () => 76,
     overscan: 15, // Bug #21: Increased overscan to handle measurement delays during lazy loading
@@ -1280,12 +1424,12 @@ export const DocumentsPage = () => {
     const last = virtualRows[virtualRows.length - 1];
     if (!last) return;
     if (initialLoading) return;
-    if (last.index >= documents.length - 10) {
+    if (last.index >= displayedDocuments.length - 10) {
       void loadMore();
     }
   }, [
     virtualRows,
-    documents.length,
+    displayedDocuments.length,
     initialLoading,
     loadMore,
     isMobile,
@@ -1314,12 +1458,6 @@ export const DocumentsPage = () => {
     return () => el.removeEventListener("scroll", onScroll);
   }, [isMobile, initialLoading, loadMore, hasMore, loadingMore]);
 
-  // Callback to refresh sidebar when a folder is created
-  const handleFolderCreated = useCallback(() => {
-    // This callback will be called when folderCreateCounter changes
-    // FolderSidebar will use it to trigger a refresh
-  }, []);
-
   if (initialLoading) {
     return (
       <div className="p-4 sm:p-6 md:p-8">
@@ -1344,225 +1482,311 @@ export const DocumentsPage = () => {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen overflow-hidden w-full">
-      {/* Folder Sidebar - Desktop only, collapsible */}
-      {!isMobile && (
-        <div
-          className={`hidden md:flex md:flex-col flex-shrink-0 h-full transition-all duration-300 border-r border-gray-200 bg-gray-50 overflow-hidden ${
-            ui.sidebarOpen ? "w-64" : "w-0"
-          }`}
-        >
-          {ui.sidebarOpen && (
-            <FolderSidebar
-              currentFolderId={currentFolderId}
-              onFolderSelect={setCurrentFolderId}
-              onCreateFolder={() =>
-                dispatch({ type: "setShowCreateFolderModal", value: true })
-              }
-              onFolderDeleted={() => {
-                // Refresh documents list after folder is deleted
-                mutateDocuments?.();
-              }}
-              onFolderCreated={handleFolderCreated}
-            />
-          )}
+    <div className="flex flex-row h-screen overflow-hidden w-full bg-white">
+      {/* Folder Sidebar */}
+      <div
+        className={`border-r border-slate-200 bg-white overflow-hidden flex flex-col transition-all duration-300 ease-in-out ${
+          sidebarExpanded ? 'w-96' : 'w-16'
+        }`}
+      >
+        {/* Sidebar Header with Toggle */}
+        <div className="flex-shrink-0 flex items-center justify-between gap-2 px-3 py-3 border-b border-gray-200 bg-white">
+          {sidebarExpanded && <h3 className="text-sm font-semibold text-gray-900">Folders</h3>}
+          <button
+            onClick={() => setSidebarExpanded(!sidebarExpanded)}
+            className="p-1.5 hover:bg-gray-100 rounded text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0 ml-auto"
+            title={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            <svg
+              className={`w-4 h-4 transition-transform ${sidebarExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
         </div>
-      )}
+
+        {/* Sidebar Content - only show when expanded */}
+        {sidebarExpanded && (
+          <FolderSidebar
+            currentFolderId={currentFolderId}
+            onFolderSelect={handleFolderSelect}
+            onCreateFolder={() => dispatch({ type: "setShowCreateFolderModal", value: true })}
+            onFolderDeleted={handleFolderDeleted}
+            onFolderCreated={handleFolderCreated}
+            onDocumentDrop={handleDocumentDrop}
+            onTrashClick={handleOpenTrash}
+          />
+        )}
+
+        {/* Collapsed sidebar - show minimize icon */}
+        {!sidebarExpanded && (
+          <div className="flex-1 flex flex-col items-center justify-start gap-2 px-2 py-3">
+            <div className="w-10 h-10 rounded bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+              📁
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Header - Minimalist with All Actions in Dropdown */}
-        <div className="flex items-center justify-between gap-4 px-3 sm:px-4 md:px-6 py-3 border-b border-slate-200 bg-gradient-to-r from-white to-blue-50 min-h-16">
-          {/* Left Section: Sidebar Toggle + Breadcrumb */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {/* Sidebar Toggle Button */}
-            {!isMobile && (
+        {/* Clean Header with Breadcrumb, Search, and Upload */}
+        <div className="flex flex-col border-b border-slate-200 bg-white">
+          {/* Top Row: Breadcrumb + Actions */}
+          <div className="flex items-center justify-between gap-4 px-6 py-3.5 min-h-14">
+            {/* Breadcrumb Navigation */}
+            <div className="flex items-center gap-2 min-w-0 flex-1">
               <button
-                onClick={() => dispatch({ type: "toggleSidebar" })}
-                className="p-1.5 hover:bg-slate-100 rounded-lg transition-all duration-200 flex-shrink-0 text-slate-500 hover:text-slate-700 flex items-center justify-center"
-                title={ui.sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-                aria-label={ui.sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+                type="button"
+                onClick={() => setCurrentFolderId(null)}
+                className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-md transition-colors ${
+                  currentFolderId === null
+                    ? "text-slate-900 bg-slate-100"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                }`}
               >
-                {ui.sidebarOpen ? (
-                  <ChevronLeft className="w-5 h-5" />
-                ) : (
-                  <ChevronRight className="w-5 h-5" />
-                )}
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                </svg>
+                <span className="hidden sm:inline">Root Documents</span>
               </button>
-            )}
 
-            {/* Breadcrumb - My Documents (Icon only on mobile) */}
-            {(currentFolderId || !isMobile) && (
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex-shrink-0">
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4z" />
-                    <path fillRule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6z" clipRule="evenodd" />
-                  </svg>
+              {breadcrumbPath.length > 0 && (
+                <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+                  {breadcrumbPath.map((folder) => {
+                    const isCurrent = currentFolderId === folder.id;
+                    return (
+                      <div key={folder.id} className="flex items-center gap-1 flex-shrink-0">
+                        <span className="text-slate-300">/</span>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentFolderId(folder.id)}
+                          className={`max-w-[220px] truncate rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                            isCurrent
+                              ? "bg-blue-100 text-blue-700"
+                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                          }`}
+                          aria-current={isCurrent ? "page" : undefined}
+                          title={folder.name}
+                        >
+                          {folder.name}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-                <span className="font-semibold text-sm text-slate-700 whitespace-nowrap hidden sm:inline">My Documents</span>
+              )}
+
+              {_folders.length > 0 && (
+                <div className="relative flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowFolderDropdown(!showFolderDropdown)}
+                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                    aria-expanded={showFolderDropdown}
+                    aria-haspopup="menu"
+                  >
+                    <span>Jump to folder</span>
+                    <svg className={`w-4 h-4 transition-transform ${showFolderDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showFolderDropdown && (
+                    <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-y-auto max-h-96">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrentFolderId(null);
+                          setShowFolderDropdown(false);
+                        }}
+                        className={`w-full px-4 py-2.5 text-sm text-left font-medium transition-colors border-b border-slate-100 ${
+                          currentFolderId === null
+                            ? "bg-blue-50 text-blue-700"
+                            : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        Root Documents
+                      </button>
+                      {_folders.map(folder => (
+                        <button
+                          type="button"
+                          key={folder.id}
+                          onClick={() => {
+                            setCurrentFolderId(folder.id);
+                            setShowFolderDropdown(false);
+                          }}
+                          className={`w-full px-4 py-2.5 text-sm text-left font-medium transition-colors border-b border-slate-100 last:border-b-0 ${
+                            currentFolderId === folder.id
+                              ? "bg-blue-50 text-blue-700"
+                              : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                          title={folder.name}
+                        >
+                          {folder.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Right Actions */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Upload Button */}
+              <label className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors cursor-pointer text-sm">
+                <Upload className="w-4 h-4" />
+                <span className="hidden sm:inline">Upload</span>
+                <input
+                  type="file"
+                  multiple
+                  accept=".doc,.docx,.pdf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  disabled={ui.uploading}
+                />
+              </label>
+
+              {/* More Options */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowActionMenu(!showActionMenu)}
+                  className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                  title="More options"
+                  aria-label="More options"
+                >
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+
+                {showActionMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        dispatch({ type: "setShowPointsExtractor", value: true });
+                        setShowActionMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-700 hover:bg-slate-50 transition-colors text-sm font-medium text-left border-b border-slate-100"
+                    >
+                      <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span>Extract Points</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        dispatch({ type: "setShowResumeProcessor", value: true });
+                        setShowActionMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-700 hover:bg-slate-50 transition-colors text-sm font-medium text-left border-b border-slate-100"
+                    >
+                      <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                      <span>Smart Editor</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        dispatch({ type: "setShowGoogleDrive", value: true });
+                        setShowActionMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-700 hover:bg-slate-50 transition-colors text-sm font-medium text-left border-b border-slate-100"
+                    >
+                      <Cloud className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                      <span>Import from Drive</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        dispatch({ type: "setShowCreateFolderModal", value: true });
+                        setShowActionMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-700 hover:bg-slate-50 transition-colors text-sm font-medium text-left border-b border-slate-100"
+                    >
+                      <FolderPlus className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span>New Folder</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTrash(true);
+                        setShowActionMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-700 hover:bg-slate-50 transition-colors text-sm font-medium text-left"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-600 flex-shrink-0" />
+                      <span>Trash</span>
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Center Section: Search Bar */}
-          <div className="flex-1 flex justify-center">
-            <div className="w-full max-w-md relative">
+          {/* Second Row: Search + Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 px-6 py-3 bg-slate-50 border-t border-slate-200">
+            {/* Search Bar */}
+            <div className="flex-1 relative">
               <input
                 id="documents-search"
                 value={ui.searchValue}
                 onChange={(e) =>
                   dispatch({ type: "setSearchValue", value: e.target.value })
                 }
-                placeholder="Search..."
-                className="w-full px-3 py-2.5 pl-9 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition placeholder:text-slate-400 bg-white hover:border-slate-400"
+                placeholder="Search documents..."
+                className="w-full px-3 py-2 pl-9 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition placeholder:text-slate-400 bg-white"
                 aria-label="Search documents"
               />
-              <svg className="absolute left-3 top-3 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               {ui.searchValue && (
                 <button
                   onClick={() => dispatch({ type: "setSearchValue", value: "" })}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition rounded p-0.5"
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition rounded p-0.5"
                   aria-label="Clear search"
                 >
                   <span className="text-lg leading-none">✕</span>
                 </button>
               )}
             </div>
-          </div>
 
-          {/* Right Section: More Options Dropdown Button */}
-          <div className="relative flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowActionMenu(!showActionMenu)}
-              className="inline-flex items-center justify-center p-2 bg-white border-2 border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 hover:scale-105 active:scale-95"
-              title="More options"
-              aria-label="More options"
-            >
-              <MoreVertical className="w-5 h-5" />
-            </button>
+            {/* Filter & Sort */}
+            <div className="flex items-center gap-2">
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as 'all' | 'pdf' | 'doc' | 'docx')}
+                className="text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                aria-label="Filter by file type"
+              >
+                <option value="all">All Types</option>
+                <option value="pdf">PDF</option>
+                <option value="doc">DOC</option>
+                <option value="docx">DOCX</option>
+              </select>
 
-            {/* Dropdown Menu */}
-            {showActionMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-lg shadow-2xl z-50 overflow-hidden">
-                {/* Upload Option */}
-                <label className="w-full flex items-center gap-3 px-4 py-3.5 text-slate-700 hover:bg-blue-50 transition-colors text-sm font-medium cursor-pointer"
-                  onClick={() => setShowActionMenu(false)}
-                >
-                  <Upload className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                  <span>Upload Documents</span>
-                  <input
-                    type="file"
-                    multiple
-                    accept=".doc,.docx,.pdf"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    disabled={ui.uploading}
-                  />
-                </label>
-
-                {/* Extract Points Option */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    dispatch({ type: "setShowPointsExtractor", value: true });
-                    setShowActionMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-slate-700 hover:bg-amber-50 transition-colors text-sm font-medium border-t border-slate-100"
-                >
-                  <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                  <span>Extract Points</span>
-                </button>
-
-                {/* Resume Editor Option */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    dispatch({ type: "setShowResumeProcessor", value: true });
-                    setShowActionMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-slate-700 hover:bg-purple-50 transition-colors text-sm font-medium border-t border-slate-100"
-                >
-                  <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                  <span>Smart Editor</span>
-                </button>
-
-                {/* Google Drive Option */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    dispatch({ type: "setShowGoogleDrive", value: true });
-                    setShowActionMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-slate-700 hover:bg-blue-50 transition-colors text-sm font-medium border-t border-slate-100"
-                >
-                  <Cloud className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                  <span>Import from Drive</span>
-                </button>
-
-                {/* New Folder Option */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    dispatch({ type: "setShowCreateFolderModal", value: true });
-                    setShowActionMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-slate-700 hover:bg-amber-50 transition-colors text-sm font-medium border-t border-slate-100"
-                >
-                  <FolderPlus className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                  <span>New Folder</span>
-                </button>
-
-                {/* Paste Option - Conditional */}
-                {ui.copiedDocument && (
-                  <>
-                    <div className="border-t border-slate-100" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handlePasteDocument();
-                        setShowActionMenu(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 text-emerald-700 hover:bg-emerald-50 transition-colors text-sm font-medium"
-                    >
-                      <ClipboardPaste className="w-4 h-4 flex-shrink-0" />
-                      <span>Paste Document</span>
-                    </button>
-                  </>
-                )}
-
-                {/* Select All Option */}
-                {documents.length > 0 && (
-                  <>
-                    <div className="border-t border-slate-100" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (selectedDocIds.length === documents.length) {
-                          dispatch({ type: "clearSelection" });
-                        } else {
-                          dispatch({ type: "selectAllDocs", docIds: documents.map(d => d.id) });
-                        }
-                        setShowActionMenu(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 text-slate-700 hover:bg-blue-50 transition-colors text-sm font-medium"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedDocIds.length === documents.length && documents.length > 0}
-                        readOnly
-                        className="w-4 h-4 rounded cursor-pointer flex-shrink-0"
-                        aria-hidden="true"
-                      />
-                      <span>{selectedDocIds.length === documents.length ? "Deselect All" : "Select All"}</span>
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'created_desc' | 'created_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc')}
+                className="text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                aria-label="Sort documents"
+              >
+                <option value="created_desc">Newest</option>
+                <option value="created_asc">Oldest</option>
+                <option value="name_asc">Name ↑</option>
+                <option value="name_desc">Name ↓</option>
+                <option value="size_desc">Largest</option>
+                <option value="size_asc">Smallest</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1600,69 +1824,26 @@ export const DocumentsPage = () => {
         </div>
       )}
 
-            {selectedDocIds.length > 0 && (
-        <div className="mb-6 p-5 bg-gradient-to-r from-blue-50 to-cyan-50 border-l-4 border-blue-600 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md hover:shadow-lg transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="inline-flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-lg text-sm font-bold">
-              {selectedDocIds.length}
-            </div>
-            <span className="text-slate-900 font-semibold text-sm">
-              {selectedDocIds.length > 1 ? `${selectedDocIds.length} documents selected` : "1 document selected"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              onClick={openEditor}
-              onMouseEnter={() => {
-                editorPromise();
-              }}
-              onFocus={() => {
-                editorPromise();
-              }}
-              disabled={isMobile}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                isMobile
-                  ? "bg-gray-200 text-gray-500 cursor-not-allowed opacity-50"
-                  : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-md hover:shadow-lg"
-              }`}
-              title={
-                isMobile
-                  ? "Resume editor is only available on desktop"
-                  : "Edit selected documents"
-              }
-            >
-              {isMobile ? (
-                <>
-                  <Monitor className="w-4 h-4" />
-                  Desktop Only
-                </>
-              ) : (
-                <>
-                  <Edit className="w-4 h-4" />
-                  Edit
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={() => dispatch({ type: "openBulkDeleteConfirm" })}
-              disabled={ui.deletingInProgress}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 border-2 rounded-lg font-medium text-sm transition-all ${
-                ui.deletingInProgress
-                  ? "border-red-300 bg-red-50 text-red-500 opacity-50 cursor-not-allowed"
-                  : "border-red-300 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-400 shadow-sm hover:shadow-md"
-              }`}
-              title={ui.deletingInProgress ? "Deleting..." : "Delete selected documents"}
-              aria-label="Delete all selected documents"
-            >
-              <span className={ui.deletingInProgress ? "inline-block animate-spin" : ""}>
-                <Trash2 className="w-4 h-4" />
-              </span>
-              {ui.deletingInProgress ? "Deleting..." : "Delete"}
-            </button>
-          </div>
-        </div>
-      )}
+            {selectedDocIds.length > 0 ? (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedDocIds.length === displayedDocuments.length}
+                  onChange={() => {
+                    if (selectedDocIds.length === displayedDocuments.length) {
+                      dispatch({ type: "clearSelection" });
+                    } else {
+                      dispatch({ type: "selectAllDocs", docIds: displayedDocuments.map(d => d.id) });
+                    }
+                  }}
+                  className="w-4 h-4 rounded border-blue-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  aria-label="Select or deselect all"
+                />
+                <span className="text-sm font-medium text-slate-900">
+                  {selectedDocIds.length} of {displayedDocuments.length} selected
+                </span>
+              </div>
+            ) : null}
 
             {Object.keys(ui.uploadProgress).length > 0 && (
         <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-md hover:shadow-lg transition-shadow">
@@ -1702,92 +1883,51 @@ export const DocumentsPage = () => {
         }
       />
 
-            {documents.length === 0 ? (
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50 shadow-sm hover:shadow-md transition-all">
-          {/* Decorative background elements */}
-          <div className="absolute inset-0 opacity-0 hover:opacity-5 transition-opacity" />
-          
-          {/* Content */}
-          <div className="relative px-8 py-24 sm:py-32 text-center">
-            {/* Icon Container - Modern gradient */}
-            <div className="mb-8 flex justify-center">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-blue-600 rounded-2xl blur-2xl opacity-20" />
-                <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center border border-blue-200 shadow-lg">
-                  <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-blue-600" />
-                </div>
-              </div>
-            </div>
-
-            {/* Heading & Description */}
-            <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">
-              Start Your Resume Collection
-            </h3>
-            <p className="text-slate-600 mb-2 text-base sm:text-lg max-w-2xl mx-auto">
-              Upload your professional resumes and unlock AI-powered insights
-            </p>
-            <p className="text-slate-500 mb-8 text-sm sm:text-base max-w-2xl mx-auto">
-              Extract key points, receive intelligent recommendations, and optimize for any position
-            </p>
-
-            {/* Features Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10 max-w-3xl mx-auto">
-              <div className="p-4 rounded-xl bg-white/60 border border-slate-200 hover:border-blue-300 transition-colors">
-                <div className="text-2xl mb-2">🚀</div>
-                <p className="text-sm font-semibold text-slate-900 mb-1">AI Analysis</p>
-                <p className="text-xs text-slate-600">Extract & optimize points intelligently</p>
-              </div>
-              <div className="p-4 rounded-xl bg-white/60 border border-slate-200 hover:border-blue-300 transition-colors">
-                <div className="text-2xl mb-2">📄</div>
-                <p className="text-sm font-semibold text-slate-900 mb-1">Multi-Format</p>
-                <p className="text-xs text-slate-600">PDF, DOCX, DOC fully supported</p>
-              </div>
-              <div className="p-4 rounded-xl bg-white/60 border border-slate-200 hover:border-blue-300 transition-colors">
-                <div className="text-2xl mb-2">⚡</div>
-                <p className="text-sm font-semibold text-slate-900 mb-1">Fast & Secure</p>
-                <p className="text-xs text-slate-600">Enterprise-grade processing</p>
-              </div>
-            </div>
-
-            {/* Primary CTA */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <label className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-105 cursor-pointer group">
-                <Upload className="w-5 h-5 group-hover:animate-bounce" />
-                Upload Your First Resume
-                <input
-                  type="file"
-                  multiple
-                  accept=".doc,.docx,.pdf"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-              </label>
-              
-              <button
-                type="button"
-                onClick={() =>
-                  dispatch({ type: "setShowGoogleDrive", value: true })
-                }
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-all"
-              >
-                <Cloud className="w-5 h-5" />
-                Import from Google Drive
-              </button>
-            </div>
-
-            {isMobile && (
-              <p className="text-xs text-slate-500 text-center mt-6">
-                <Monitor className="inline w-4 h-4 mr-1" />
-                Full editor features available on desktop
-              </p>
-            )}
-          </div>
-        </div>
+      {/* Conditionally render Trash or Documents */}
+      {showTrash ? (
+        <TrashView onBack={() => setShowTrash(false)} />
       ) : (
-        <div className="card-base overflow-visible">
+        <>
+          {displayedDocuments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 px-6">
+              <div className="w-20 h-20 rounded-lg bg-slate-100 flex items-center justify-center mb-4">
+                <FileText className="w-10 h-10 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">No documents yet</h3>
+              <p className="text-slate-500 text-center mb-6 max-w-sm">
+                {search
+                  ? "No documents match your search. Try different keywords."
+                  : "Upload your first resume to get started."}
+              </p>
+              {!search && (
+                <div className="flex gap-3">
+                  <label className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors cursor-pointer text-sm">
+                    <Upload className="w-4 h-4" />
+                    Upload
+                    <input
+                      type="file"
+                      multiple
+                      accept=".doc,.docx,.pdf"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => dispatch({ type: "setShowGoogleDrive", value: true })}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors text-sm"
+                  >
+                    <Cloud className="w-4 h-4" />
+                    Import
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+        <div className="overflow-visible">
           {isMobile ? (
             <div className="divide-y divide-gray-100">
-              {documents.map((doc) => (
+              {displayedDocuments.map((doc) => (
                 <MobileDocumentCard
                   key={doc.id}
                   doc={doc}
@@ -1797,10 +1937,12 @@ export const DocumentsPage = () => {
                   onDownload={handleDownload}
                   onDelete={handleRowDelete}
                   onCopy={handleCopyDocument}
+                  onEdit={handleEditDocument}
+                  onDragStart={handleDocumentDragStart}
                 />
               ))}
               {(loadingMore || hasMore) && (
-                <div className="px-4 py-3 text-xs text-gray-500">
+                <div className="px-6 py-3 text-xs text-slate-500 text-center">
                   {loadingMore
                     ? "Loading more documents..."
                     : "Scroll to load more"}
@@ -1809,15 +1951,15 @@ export const DocumentsPage = () => {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[44px_1fr_110px_110px_130px_140px] items-center px-4 py-3 text-xs font-semibold text-gray-700 bg-gray-50 border-b border-gray-200">
-                <div />
-                <div>Filename</div>
-                <div className="text-right">Version</div>
-                <div className="text-right">Size</div>
-                <div className="text-right">Created</div>
-                <div className="text-right">Actions</div>
+              {/* Table Header - Desktop only */}
+              <div className="flex items-center gap-3 px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-600 uppercase tracking-wide">
+                <div className="w-4 flex-shrink-0" />
+                <div className="flex-1">Name</div>
+                <div className="hidden sm:block flex-shrink-0 w-20">Version</div>
+                <div className="w-24 flex-shrink-0" />
               </div>
 
+              {/* Virtual Table Rows */}
               <div
                 style={{
                   height: rowVirtualizer.getTotalSize(),
@@ -1825,7 +1967,7 @@ export const DocumentsPage = () => {
                 }}
               >
                 {virtualRows.map((vr) => {
-                  const doc = documents[vr.index];
+                  const doc = displayedDocuments[vr.index];
                   if (!doc) return null;
 
                   return (
@@ -1847,6 +1989,8 @@ export const DocumentsPage = () => {
                         onDownload={handleDownload}
                         onDelete={handleRowDelete}
                         onCopy={handleCopyDocument}
+                        onEdit={handleEditDocument}
+                        onDragStart={handleDocumentDragStart}
                       />
                     </div>
                   );
@@ -1854,7 +1998,7 @@ export const DocumentsPage = () => {
               </div>
 
               {(loadingMore || hasMore) && (
-                <div className="px-4 py-3 text-xs text-gray-500 border-t border-gray-100">
+                <div className="px-6 py-3 text-xs text-slate-500 text-center border-t border-slate-200">
                   {loadingMore
                     ? "Loading more documents..."
                     : "Scroll to load more"}
@@ -1863,6 +2007,8 @@ export const DocumentsPage = () => {
             </>
           )}
         </div>
+      )}
+        </>
       )}
 
       {/* Document Editor Modal */}
@@ -1946,6 +2092,7 @@ export const DocumentsPage = () => {
           }
         }}
         onConfirm={ui.bulkDeleteMode ? handleBulkDelete : handleDelete}
+        isLoading={ui.deletingInProgress}
         title={ui.bulkDeleteMode ? "Delete Multiple Documents" : "Delete Document"}
         message={
           ui.bulkDeleteMode

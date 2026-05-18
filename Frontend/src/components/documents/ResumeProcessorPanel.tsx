@@ -211,18 +211,18 @@ const ResumeProcessorContent: React.FC<{ onClose: () => void }> = ({ onClose }) 
             <div>
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Step 1: Upload Resume</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Upload a .docx file with Word bookmarks. The app will auto-detect all bookmarks.
+                Upload a .docx file. The app will detect bookmarks or create them from a bookmarked reference resume.
               </p>
 
               {/* Info box */}
               <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <p className="text-xs font-medium text-blue-900 dark:text-blue-100 mb-1">📌 What are bookmarks?</p>
                 <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
-                  Bookmarks are named sections in Word. You can create ANY custom names:
+                  Bookmarks are named sections in Word. If this resume has none, the app matches sections from your bookmarked reference resume:
                 </p>
                 <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1 ml-3 list-disc">
                   <li>First_Company, Second_Company, Third_Company</li>
-                  <li>Education, Skills, Projects (or any names you like)</li>
+                  <li>Education, Skills, Projects, or your own consistent names</li>
                 </ul>
                 <a href="/sample-resume-template.md" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-block mt-2">
                   📖 Bookmark setup guide →

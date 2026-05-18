@@ -44,8 +44,15 @@ export const isValidUrl = (url: string): boolean => {
  * Validate phone number format
  */
 export const isValidPhone = (phone: string): boolean => {
-  const cleaned = phone.replace(/[\s\-()]/g, '');
-  return cleaned.length >= 10 && cleaned.length <= 15 && /^\d+$/.test(cleaned);
+  if (!phone || typeof phone !== 'string') return false;
+  const trimmed = phone.trim();
+  // Allow international formats with optional leading "+"
+  // Examples: +1 415 555 2671, +91-9876543210, 020 7946 0958
+  if (!/^\+?[\d\s\-().]+$/.test(trimmed)) return false;
+
+  const digitsOnly = trimmed.replace(/\D/g, '');
+  // E.164 allows up to 15 digits; allow minimum 7 for regional/local numbers
+  return digitsOnly.length >= 7 && digitsOnly.length <= 15;
 };
 
 /**
@@ -118,7 +125,7 @@ export const validateConsultantForm = (data: {
   }
 
   if (data.phone && !isValidPhone(data.phone)) {
-    errors.phone = 'Invalid phone format (10-15 digits)';
+    errors.phone = 'Invalid phone format (use 7-15 digits, optional country code like +91 or +1)';
   }
 
   if (data.date_of_birth) {

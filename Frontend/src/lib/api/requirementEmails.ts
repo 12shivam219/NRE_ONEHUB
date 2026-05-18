@@ -149,6 +149,8 @@ export async function createEmailRecord(
     resourceType: 'requirement_email',
     resourceId: data.id,
     description: `Sent email "${subject}" to ${recipientEmail}`,
+  }).catch(() => {
+    // Log failure silently - don't block operation
   });
 
   return data;
@@ -463,6 +465,8 @@ export async function syncCampaignToRequirementEmails(
       resourceType: 'bulk_email_campaign',
       resourceId: campaignId,
       description: `Synced ${totalInserted} email${totalInserted !== 1 ? 's' : ''} from campaign to requirement`,
+    }).catch(() => {
+      // Log failure silently - don't block operation
     });
 
     console.log(

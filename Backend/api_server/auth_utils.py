@@ -32,6 +32,17 @@ def get_onlyoffice_callback_secret() -> str:
     return (os.getenv("ONLYOFFICE_CALLBACK_SECRET") or "").strip()
 
 
+def get_onlyoffice_config_secret() -> str:
+    secret = (
+        (os.getenv("ONLYOFFICE_JWT_SECRET") or "").strip()
+        or get_onlyoffice_callback_secret()
+        or get_supabase_jwt_secret()
+    )
+    if not secret:
+        raise HTTPException(status_code=500, detail="ONLYOFFICE JWT secret is not configured")
+    return secret
+
+
 def decode_supabase_access_token(token: str) -> Dict[str, Any]:
     secret = get_supabase_jwt_secret()
     if not secret:
@@ -80,6 +91,32 @@ def issue_onlyoffice_callback_token(document_id: str, user_id: str) -> str:
         secret,
         algorithm=JWT_ALGORITHM,
         headers={"typ": "onlyoffice-callback"},
+    )
+
+
+def issue_onlyoffice_config_token(config: Dict[str, Any]) -> str:
+    secret = get_onlyoffice_config_secret()
+    ttl = int(os.getenv("ONLYOFFICE_CONFIG_TOKEN_TTL_SECONDS", "3600"))
+    payload = dict(config)
+    payload["exp"] = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+    return jwt.encode(
+        payload,
+        secret,
+        algorithm=JWT_ALGORITHM,
+        headers={"typ": "onlyoffice-config"},
+    )
+
+
+def issue_onlyoffice_request_token(payload: Dict[str, Any]) -> str:
+    secret = get_onlyoffice_config_secret()
+    ttl = int(os.getenv("ONLYOFFICE_REQUEST_TOKEN_TTL_SECONDS", "300"))
+    claims = dict(payload)
+    claims["exp"] = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+    return jwt.encode(
+        claims,
+        secret,
+        algorithm=JWT_ALGORITHM,
+        headers={"typ": "onlyoffice-request"},
     )
 
 

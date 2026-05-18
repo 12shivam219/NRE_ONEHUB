@@ -15,6 +15,14 @@ interface AutomationRequest {
   user_id: string;
 }
 
+interface AutomationEmailRequest {
+  document_id: string;
+  recruiter_email: string;
+  job_title: string;
+  personal_message?: string;
+  user_id: string;
+}
+
 interface AutoSelectedResume {
   name: string;
   person_name?: string;
@@ -30,6 +38,7 @@ interface AutomationResultData {
   document_id?: string;
   filename?: string;
   original_filename?: string;
+  automation_output_path?: string;
   match_score?: number;
   generated_points?: string;
   file_size?: number;
@@ -151,6 +160,45 @@ class AutomationAPI {
         errorCode: error instanceof Error && error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR',
       };
     }
+  }
+
+  async sendEmail(request: AutomationEmailRequest): Promise<ApiResponse<{ message: string }>> {
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !sessionData.session?.access_token) {
+      return {
+        success: false,
+        data: null,
+        error: 'You must be signed in to send email.',
+        errorCode: 'UNAUTHENTICATED',
+      };
+    }
+
+    const response = await this.fetchWithTimeout(`${this.baseUrl}/api/automation/send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionData.session.access_token}`,
+      },
+      body: JSON.stringify(request),
+    });
+
+    const parsed = (await response.json().catch(() => ({}))) as ApiResponse<{ message: string }> & { detail?: unknown };
+
+    if (!response.ok) {
+      return {
+        success: false,
+        data: null,
+        error: formatHttpError(response.status, parsed),
+        errorCode: response.status === 401 || response.status === 403 ? 'UNAUTHORIZED' : 'EMAIL_ERROR',
+      };
+    }
+
+    return {
+      success: parsed.success,
+      data: parsed.data ?? null,
+      error: parsed.error ?? null,
+      errorCode: parsed.errorCode ?? null,
+    };
   }
 
   async downloadResume(fileId: string): Promise<Blob> {
